@@ -2,3 +2,16 @@
 node_modules/
 dist/
 .turbo/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Local env
+.env

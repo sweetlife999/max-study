@@ -1,0 +1,91 @@
+# Example university configuration (ARCHITECTURE.md §6).
+# "Университет N" is fictional: copy this file, adapt it to a real institution and point
+# UNIVERSITY_CONFIG_PATH at the copy. The file is validated on start; an invalid file stops
+# the process.
+
+university:
+  name:
+    ru: "Университет N"
+    en: "University N"
+  # IANA time zone. Stored times are UTC; this is used only for display and CSV export.
+  timezone: "Europe/Moscow"
+
+# Every localized text below must have an entry for each language listed here.
+languages: [ru, en]
+
+# Activity kinds. `key` is stored in events.kind; `default_points` is used when an
+# organizer does not set points explicitly.
+event_kinds:
+  - key: curator_meeting
+    title: { ru: "Встреча с куратором", en: "Curator meeting" }
+    default_points: 10
+  - key: council
+    title: { ru: "Студсовет", en: "Student council" }
+    default_points: 10
+  - key: club
+    title: { ru: "Клуб по интересам", en: "Student club" }
+    default_points: 5
+  - key: campus_tour
+    title: { ru: "Экскурсия по кампусу", en: "Campus tour" }
+    default_points: 5
+  - key: volunteering
+    title: { ru: "Волонтёрство", en: "Volunteering" }
+    default_points: 15
+
+# Onboarding checklist, shown in this order.
+#   type: event_kind — done after a check-in at an event of `event_kind`
+#                      (or at any event whose onboarding_step equals this key);
+#   type: manual     — the student marks it done in the mini-app.
+onboarding_steps:
+  - key: join_group_chat
+    type: manual
+    title: { ru: "Вступить в чат группы", en: "Join your group chat" }
+    description:
+      ru: "Попросите ссылку у старосты или куратора и вступите в чат группы в MAX."
+      en: "Ask your group leader or curator for the link and join the group chat in MAX."
+  - key: campus_tour
+    type: event_kind
+    event_kind: campus_tour
+    title: { ru: "Пройти экскурсию по кампусу", en: "Take the campus tour" }
+    description:
+      ru: "Узнайте, где учебные корпуса, библиотека, столовая и деканат."
+      en: "Find the lecture halls, library, canteen and dean's office."
+  - key: meet_curator
+    type: event_kind
+    event_kind: curator_meeting
+    title: { ru: "Познакомиться с куратором", en: "Meet your curator" }
+    description:
+      ru: "Приходите на первую кураторскую встречу группы."
+      en: "Come to the first curator meeting of your group."
+  - key: visit_council
+    type: event_kind
+    event_kind: council
+    title: { ru: "Побывать на открытом студсовете", en: "Visit an open student council" }
+    description:
+      ru: "Посмотрите, как устроено студенческое самоуправление, и предложите идею."
+      en: "See how student self-government works and bring an idea."
+  - key: try_club
+    type: event_kind
+    event_kind: club
+    title: { ru: "Сходить в клуб по интересам", en: "Try a student club" }
+    description:
+      ru: "Выберите любой клуб и приходите на встречу."
+      en: "Pick any club and come to one meeting."
+
+# What points are good for. Text only: the system does not issue rewards.
+points_rewards:
+  - threshold: 30
+    title:
+      ru: "Благодарственное письмо от студсовета"
+      en: "Letter of appreciation from the student council"
+  - threshold: 60
+    title:
+      ru: "Запись о внеучебной активности в портфолио"
+      en: "Extracurricular activity record in your portfolio"
+  - threshold: 100
+    title:
+      ru: "Приглашение на выездную школу актива"
+      en: "Invitation to the student leadership retreat"
+
+# RSVP reminders, ISO 8601 durations before the event starts.
+reminders_before: [PT24H, PT1H]

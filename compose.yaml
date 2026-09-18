@@ -1,0 +1,88 @@
+# Local stack (ARCHITECTURE.md §11): `docker compose up --build` from a clean clone.
+#
+# What works today:
+#     docker compose up --build postgres migrate seed
+#
+# Do not add `--exit-code-from`: it implies --abort-on-container-exit, so `migrate` finishing
+# tears the network down while `seed` is still connecting. To check exit codes (CI does),
+# run the one-shot services on their own:
+#     docker compose up --build --wait postgres
+#     docker compose run --rm migrate && docker compose run --rm seed
+# `api`, `bot` and `web` are defined by their own branches; their places are marked below so
+# that adding them is a service block, not a rewrite of this file.
+#
+# Copy .env.example to .env first; compose reads it automatically.
+
+name: campus
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-campus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-campus}
+      POSTGRES_DB: ${POSTGRES_DB:-campus}
+      # Deterministic collation, so ORDER BY does not depend on the host's locale.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # -d and -U: without them pg_isready reports the server up before the database exists.
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-campus} -d ${POSTGRES_DB:-campus}"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    ports:
+      # Exposed for psql and for `uv run pytest` against this database; the services inside the
+      # network reach it as `postgres:5432` regardless.
+      - "${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
+
+  # --- one-shot jobs ----------------------------------------------------------------------------
+
+  migrate:
+    build: &backend-build
+      context: .
+      dockerfile: backend/Dockerfile
+    image: campus-backend:local
+    command: ["alembic", "upgrade", "head"]
+    environment: &backend-env
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://campus:campus@postgres:5432/campus}
+      UNIVERSITY_CONFIG_PATH: ${UNIVERSITY_CONFIG_PATH:-/app/config/university.example.yaml}
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
+      MAX_BOT_USERNAME: ${MAX_BOT_USERNAME:-}
+      MAX_API_BASE_URL: ${MAX_API_BASE_URL:-https://platform-api2.max.ru}
+      ADMIN_MAX_USER_IDS: ${ADMIN_MAX_USER_IDS:-}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-}
+      CHECKIN_CODE_STEP_SECONDS: ${CHECKIN_CODE_STEP_SECONDS:-10}
+      CHECKIN_CODE_TOLERANCE_STEPS: ${CHECKIN_CODE_TOLERANCE_STEPS:-2}
+      INIT_DATA_TTL_SECONDS: ${INIT_DATA_TTL_SECONDS:-86400}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  seed:
+    build: *backend-build
+    image: campus-backend:local
+    command: ["python", "-m", "campus.seed"]
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # --- long-running services --------------------------------------------------------------------
+  # Left to the branches that build them. Each needs `build: *backend-build`,
+  # `environment: *backend-env` and `depends_on: {migrate: {condition:
+  # service_completed_successfully}}`.
+  #
+  # api:   command: ["python", "-m", "campus.api"]    — FastAPI behind web, port 8000
+  # bot:   command: ["python", "-m", "campus.bot"]    — exactly one replica (§2: advisory lock)
+  # web:   build: {context: ., dockerfile: web/Dockerfile} — Caddy serving the mini-app and /api
+
+volumes:
+  postgres-data:

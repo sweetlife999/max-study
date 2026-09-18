@@ -17,6 +17,18 @@ CSV_ENCODING = "utf-8-sig"
 CSV_HEADER = ("user_id", "first_name", "method", "checked_in_at")
 CSV_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S %Z"
 
+# A cell Excel, LibreOffice or Sheets reads as a formula rather than as text. `first_name` is
+# whatever the student set in MAX, so a name of `=cmd|" /C calc"!A0` would run on the organizer's
+# machine the moment they open the export. Quoting is not enough — the spreadsheet unquotes
+# before it decides — so a leading trigger is neutralised with the documented apostrophe prefix.
+CSV_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
+CSV_FORMULA_ESCAPE = "'"
+
+
+def csv_safe(value: str) -> str:
+    """``value`` as a cell no spreadsheet will evaluate. Ordinary text is returned unchanged."""
+    return CSV_FORMULA_ESCAPE + value if value.startswith(CSV_FORMULA_TRIGGERS) else value
+
 
 @dataclass(frozen=True, slots=True)
 class AttendanceService(Service):
@@ -49,7 +61,7 @@ class AttendanceService(Service):
         return int(result.scalar_one())
 
     def to_csv(self, view: AttendanceView) -> bytes:
-        """UTF-8 with BOM, timestamps rendered in the university's own time zone."""
+        """UTF-8 with BOM, timestamps in the university's own time zone, no live formulas."""
         buffer = io.StringIO(newline="")
         writer = csv.writer(buffer, lineterminator="\r\n")
         writer.writerow(CSV_HEADER)
@@ -57,9 +69,9 @@ class AttendanceService(Service):
             writer.writerow(
                 [
                     entry.user_id,
-                    entry.first_name,
-                    entry.method,
-                    self._local(entry.checked_in_at),
+                    csv_safe(entry.first_name),
+                    csv_safe(entry.method),
+                    csv_safe(self._local(entry.checked_in_at)),
                 ]
             )
         return buffer.getvalue().encode(CSV_ENCODING)

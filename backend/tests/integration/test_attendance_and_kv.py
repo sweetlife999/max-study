@@ -4,6 +4,8 @@ import csv
 import io
 from datetime import timedelta
 
+import pytest
+
 from campus.domain.services.attendance import CSV_HEADER
 from campus.domain.services.kv import UPDATES_MARKER_KEY
 from tests.integration.factories import World
@@ -121,6 +123,47 @@ async def test_a_name_with_a_comma_is_quoted(world: World) -> None:
 
     rows = list(csv.reader(io.StringIO(exported.decode("utf-8-sig"))))
     assert rows[1][1] == 'Аня, "Староста"'
+
+
+async def test_a_name_that_looks_like_a_formula_cannot_execute_in_a_spreadsheet(
+    world: World,
+) -> None:
+    """The organizer opens this file in Excel; a MAX display name must not become a command."""
+    organizer = await world.organizer()
+    student = await world.user(first_name='=cmd|" /C calc"!A0')
+    event = await world.open_event_now(organizer=organizer)
+    await world.checkins.check_in(user=student, code=world.code_for(event), method="qr")
+
+    exported = await world.attendance.csv_for(event)
+
+    rows = list(csv.reader(io.StringIO(exported.decode("utf-8-sig"))))
+    assert not rows[1][1].startswith("=")
+    assert '=cmd|" /C calc"!A0' in rows[1][1]
+
+
+@pytest.mark.parametrize("name", ["=1+1", "+1+1", "-1+1", "@SUM(A1)", "\tcmd", "\rcmd"])
+async def test_every_formula_trigger_character_is_defused(world: World, name: str) -> None:
+    organizer = await world.organizer()
+    student = await world.user(first_name=name)
+    event = await world.open_event_now(organizer=organizer)
+    await world.checkins.check_in(user=student, code=world.code_for(event), method="qr")
+
+    exported = await world.attendance.csv_for(event)
+
+    rows = list(csv.reader(io.StringIO(exported.decode("utf-8-sig"))))
+    assert rows[1][1][0] not in "=+-@\t\r"
+
+
+async def test_an_ordinary_name_gains_no_prefix(world: World) -> None:
+    organizer = await world.organizer()
+    student = await world.user(first_name="Аня")
+    event = await world.open_event_now(organizer=organizer)
+    await world.checkins.check_in(user=student, code=world.code_for(event), method="qr")
+
+    exported = await world.attendance.csv_for(event)
+
+    rows = list(csv.reader(io.StringIO(exported.decode("utf-8-sig"))))
+    assert rows[1][1] == "Аня"
 
 
 async def test_timestamps_are_rendered_in_the_university_time_zone(world: World) -> None:

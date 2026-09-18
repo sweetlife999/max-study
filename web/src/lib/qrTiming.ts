@@ -5,8 +5,12 @@
  * We therefore translate the server `expires_at` into local time using an estimate of the clock
  * offset taken at the moment the response arrived:
  *
- * 1. If the HTTP `Date` header is readable, it is the server clock (1 s resolution). It is
- *    clamped into `[window_started_at, expires_at)`, which must contain the server time.
+ * 1. If the HTTP `Date` header is readable, it is the server clock truncated to whole seconds,
+ *    i.e. a *lower bound* on the server time. Using the bound as-is biases the refresh late
+ *    rather than early, which is the safe direction: a code fetched too early belongs to the
+ *    window we already show, while a code fetched up to a second late is still accepted by the
+ *    backend (§5 tolerates `CHECKIN_CODE_TOLERANCE_STEPS` past windows). The bound is clamped
+ *    into `[window_started_at, expires_at)`, which must contain the server time.
  * 2. Otherwise, if the local clock already falls inside the window, it is trusted (offset 0).
  * 3. Otherwise the local clock is off; assume the server was at the window start. Refetches are
  *    scheduled at window boundaries, so after the first request this is accurate.
@@ -38,8 +42,8 @@ export function estimateClockOffset(input: QrTimingInput): number {
     return 0;
   }
   if (input.serverDate !== null && Number.isFinite(input.serverDate)) {
-    // The header truncates to whole seconds: the true server time is within the next second.
-    const serverNow = Math.min(Math.max(input.serverDate + 500, windowStart), expires - 1);
+    // Lower bound on the server time: never refresh before the server window has really ended.
+    const serverNow = Math.min(Math.max(input.serverDate, windowStart), expires - 1);
     return input.receivedAt - serverNow;
   }
   if (input.receivedAt >= windowStart && input.receivedAt < expires) return 0;

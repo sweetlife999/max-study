@@ -36,10 +36,19 @@ describe('estimateClockOffset', () => {
     expect(estimateClockOffset(input({ receivedAt }))).toBe(-90_000);
   });
 
-  it('uses the Date header, compensating for its whole-second resolution', () => {
+  it('uses the Date header as the server clock', () => {
     const serverDate = WINDOW_START + 4_000;
-    const receivedAt = serverDate + 500 + 120_000; // client is two minutes ahead
+    const receivedAt = serverDate + 120_000; // client is two minutes ahead
     expect(estimateClockOffset(input({ receivedAt, serverDate }))).toBe(120_000);
+  });
+
+  it('treats the whole-second Date header as a lower bound, never refreshing early', () => {
+    // The header is truncated, so the real server time is up to a second later and the real
+    // offset up to a second smaller. Overstating the offset delays the refresh — the safe way.
+    const serverDate = WINDOW_START + 4_000;
+    const trueServerNow = serverDate + 999;
+    const receivedAt = trueServerNow + 120_000;
+    expect(estimateClockOffset(input({ receivedAt, serverDate }))).toBe(120_999);
   });
 
   it('clamps a Date header that lies outside the window', () => {
@@ -72,9 +81,10 @@ describe('computeQrRefreshDelay', () => {
   });
 
   it('shifts the refresh by the Date header offset', () => {
+    // The server is 8 s into a 10 s window, so 2 s of it remain whatever the device clock says.
     const serverDate = WINDOW_START + 8_000;
-    const data = input({ serverDate, receivedAt: serverDate + 500 - 30_000 });
-    expect(computeQrRefreshDelay(data, data.receivedAt)).toBe(1_500 + QR_REFRESH_GUARD_MS);
+    const data = input({ serverDate, receivedAt: serverDate - 30_000 });
+    expect(computeQrRefreshDelay(data, data.receivedAt)).toBe(2_000 + QR_REFRESH_GUARD_MS);
   });
 
   it('accounts for time that passed after the response arrived', () => {

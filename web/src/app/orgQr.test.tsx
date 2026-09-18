@@ -88,6 +88,46 @@ describe('the full-screen QR', () => {
     expect(await screen.findByText('Отметились: 4')).toBeInTheDocument();
   });
 
+  it('refreshes the counter without downloading attendee names', async () => {
+    qrEndpoint();
+    let attendanceCalls = 0;
+    server.use(
+      http.get('*/api/org/events/:id/attendance', () => {
+        attendanceCalls += 1;
+        return HttpResponse.error();
+      }),
+    );
+    renderApp({ route: `/org/events/${OPEN_EVENT_ID}/qr`, fakeTimers: true });
+    expect(await screen.findByText('Отметились: 4')).toBeInTheDocument();
+    mockDb().checkins.set(OPEN_EVENT_ID, { method: 'qr', at: Date.now() });
+    await advance(6000);
+    expect(await screen.findByText('Отметились: 5')).toBeInTheDocument();
+    expect(attendanceCalls).toBe(0);
+  });
+
+  it('stops counter polling after an error and resumes after explicit retry', async () => {
+    qrEndpoint();
+    const { user } = renderApp({ route: `/org/events/${OPEN_EVENT_ID}/qr`, fakeTimers: true });
+    await screen.findByLabelText('Код');
+    let calls = 0;
+    server.use(
+      http.get(`*/api/events/${OPEN_EVENT_ID}`, () => {
+        calls += 1;
+        return HttpResponse.json(
+          { error: { code: 'not_owner', message: 'Нет доступа.' } },
+          { status: 403 },
+        );
+      }),
+    );
+    await advance(6000);
+    expect(await screen.findByText('Нет доступа.')).toBeInTheDocument();
+    await advance(30_000);
+    expect(calls).toBe(1);
+    server.resetHandlers();
+    await user.click(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByLabelText('Код')).toBeInTheDocument();
+  });
+
   it('re-requests the code exactly at the end of the server window', async () => {
     const endpoint = qrEndpoint();
     renderApp({ route: `/org/events/${OPEN_EVENT_ID}/qr`, fakeTimers: true });

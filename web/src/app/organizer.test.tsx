@@ -44,6 +44,28 @@ describe('the organizer event list', () => {
 describe('creating an event', () => {
   beforeEach(consent);
 
+  it('offers only kinds from the university config, even before any event exists', async () => {
+    mockDb().events = [];
+    mockDb().kinds = [
+      { key: 'volunteer', title: { ru: 'Волонтёрство', en: 'Volunteering' }, defaultPoints: 7 },
+    ];
+    renderApp({ route: '/org/events/new' });
+    const select = await screen.findByLabelText('Вид активности');
+    expect(within(select).getByRole('option', { name: 'Волонтёрство' })).toHaveValue('volunteer');
+    expect(within(select).queryByRole('option', { name: 'Студсовет' })).not.toBeInTheDocument();
+    expect(within(select).getAllByRole('option')).toHaveLength(2);
+  });
+
+  it('blocks submission until the config loads and allows retry after failure', async () => {
+    server.use(http.get('*/api/config', () => apiError('not_found')));
+    const { user } = renderApp({ route: '/org/events/new' });
+    const retry = await screen.findByRole('button', { name: 'Повторить' });
+    expect(screen.queryByRole('button', { name: 'Сохранить' })).not.toBeInTheDocument();
+    server.resetHandlers();
+    await user.click(retry);
+    expect(await screen.findByRole('button', { name: 'Сохранить' })).toBeEnabled();
+  });
+
   it('refuses an end that is not after the start', async () => {
     const { user } = renderApp({ route: '/org/events/new' });
 
@@ -91,7 +113,7 @@ describe('creating an event', () => {
     expect(new Date(created?.startsAt ?? 0).toISOString()).toBe('2026-10-01T07:00:00.000Z');
   });
 
-  it('offers the onboarding steps returned by GET /api/onboarding', async () => {
+  it('offers the onboarding steps returned by GET /api/config', async () => {
     renderApp({ route: '/org/events/new' });
 
     const select = await screen.findByLabelText('Шаг онбординга');

@@ -139,7 +139,6 @@
   "org.errEnds": "Enter a valid end",
   "org.errEndsBeforeStarts": "The end must be after the start",
   "org.errPoints": "Points must be a whole number, zero or more",
-  "org.kindsUnavailable": "The list of activity kinds may be incomplete: the API has no catalogue endpoint.",
 
   "org.qrTitle": "Check-in QR code",
   "org.qrCodeLabel": "Code",

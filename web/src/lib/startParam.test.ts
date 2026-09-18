@@ -2,9 +2,9 @@ import { INVALID_CHECKIN_ROUTE, startParamRoute } from './startParam';
 
 describe('startParamRoute', () => {
   it.each([
-    ['ci_1_000000', '/checkin/qr/1/000000'],
-    ['ci_42_123456', '/checkin/qr/42/123456'],
-    ['ci_9007199254740991_999999', '/checkin/qr/9007199254740991/999999'],
+    ['ci_1_000000', '/checkin/qr'],
+    ['ci_42_123456', '/checkin/qr'],
+    ['ci_9007199254740991_999999', '/checkin/qr'],
   ])('routes %s to the automatic check-in', (startParam, route) => {
     expect(startParamRoute(startParam)).toBe(route);
   });

@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useBridge } from '../bridge/context';
+import { parseCheckinStartParam } from '../lib/checkinPayload';
+import { useCheckinPayload } from './checkinPayload';
 import { startParamRoute } from '../lib/startParam';
 
 /**
@@ -11,14 +13,17 @@ import { startParamRoute } from '../lib/startParam';
 export function StartParamRedirect() {
   const bridge = useBridge();
   const navigate = useNavigate();
+  const { setPayload } = useCheckinPayload();
   const handled = useRef(false);
 
   useEffect(() => {
     if (handled.current) return;
     handled.current = true;
+    const payload = parseCheckinStartParam(bridge.startParam);
+    if (payload) setPayload(payload);
     const target = startParamRoute(bridge.startParam);
     if (target !== null) void navigate(target, { replace: true });
-  }, [bridge, navigate]);
+  }, [bridge, navigate, setPayload]);
 
   return null;
 }

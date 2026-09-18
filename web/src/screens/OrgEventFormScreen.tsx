@@ -5,17 +5,15 @@ import { useNavigate, useParams } from 'react-router';
 import {
   useCreateEventMutation,
   useEventQuery,
-  useOnboardingQuery,
-  useOrgEventsQuery,
+  useConfigQuery,
   useUpdateEventMutation,
 } from '../api/queries';
 import type { CreateEventRequest, Event } from '../api/types';
 import { useSession } from '../app/session';
 import { NotFoundState } from '../components/NotFound';
 import { Page } from '../components/Page';
-import { InlineError, QueryState } from '../components/states';
+import { ErrorState, LoadingState, InlineError, QueryState } from '../components/states';
 import { useI18n } from '../i18n/i18n';
-import { collectEventKinds, collectOnboardingSteps } from '../lib/eventKinds';
 import { parseId } from '../lib/routeParams';
 import { emptyEventForm, eventToForm, validateEventForm, type EventForm } from '../lib/eventForm';
 
@@ -115,19 +113,18 @@ function EventFormView({ initial, timezone, pending, error, onSubmit }: EventFor
   const { t } = useI18n();
   const [form, setForm] = useState(initial);
   const [showErrors, setShowErrors] = useState(false);
-  const orgEvents = useOrgEventsQuery();
-  const onboarding = useOnboardingQuery();
-
-  const kinds = collectEventKinds({
-    events: orgEvents.data?.items ?? [],
-    onboarding: onboarding.data,
-  });
-  const steps = collectOnboardingSteps(onboarding.data);
+  const config = useConfigQuery();
+  const kinds = config.data?.event_kinds ?? [];
+  const steps = config.data?.onboarding_steps ?? [];
   const { errors, request } = validateEventForm(form, timezone);
   const field = <K extends keyof EventForm>(key: K, value: EventForm[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
   const errorFor = (key: keyof typeof errors) => (showErrors ? errors[key] : undefined);
+
+  if (config.isPending) return <LoadingState />;
+  if (config.isError)
+    return <ErrorState error={config.error} onRetry={() => void config.refetch()} />;
 
   return (
     <form
@@ -175,9 +172,6 @@ function EventFormView({ initial, timezone, pending, error, onSubmit }: EventFor
             </select>
           )}
         </Field>
-        <Typography.Body variant="small" className="muted">
-          {t('org.kindsUnavailable')}
-        </Typography.Body>
 
         <Field label={t('org.fieldLocation')}>
           {(props) => (

@@ -4,12 +4,7 @@ import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { isApiError } from '../api/errors';
-import {
-  queryKeys,
-  useAttendanceQuery,
-  useEventQuery,
-  useSendQrToChatMutation,
-} from '../api/queries';
+import { queryKeys, useEventQuery, useSendQrToChatMutation } from '../api/queries';
 import { useRotatingQr } from '../api/useRotatingQr';
 import type { Event } from '../api/types';
 import { useBridge, useNativeBackButton } from '../bridge/context';
@@ -38,7 +33,7 @@ export function OrgQrScreen() {
 }
 
 function QrLoader({ eventId }: { eventId: number }) {
-  const query = useEventQuery(eventId);
+  const query = useEventQuery(eventId, { poll: true });
   return <QueryState query={query}>{(event) => <QrScreenBody event={event} />}</QueryState>;
 }
 
@@ -55,7 +50,6 @@ function QrScreenBody({ event }: { event: Event }) {
   useNativeBackButton(() => void navigate(back));
 
   const rotating = useRotatingQr(event.id, event.checkin_open);
-  const attendance = useAttendanceQuery(event.id, { poll: event.checkin_open });
   const sendToChat = useSendQrToChatMutation(event.id);
   const now = useNow(COUNTDOWN_TICK_MS, event.checkin_open);
   const queryClient = useQueryClient();
@@ -97,7 +91,7 @@ function QrScreenBody({ event }: { event: Event }) {
   }
 
   const remaining = secondsLeft(rotating.timing, now);
-  const checkedIn = attendance.data?.checkin_count ?? 0;
+  const checkedIn = event.attendees_count;
 
   return (
     <main className="qr-screen">

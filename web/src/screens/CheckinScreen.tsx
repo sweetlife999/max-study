@@ -2,6 +2,7 @@ import { Button, Flex, Typography } from '@maxhub/max-ui';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
+import { useCheckinPayload } from '../app/checkinPayload';
 import { useCheckinMutation, useEventsQuery } from '../api/queries';
 import type { Event } from '../api/types';
 import { useBridge } from '../bridge/context';
@@ -19,6 +20,7 @@ export function CheckinScreen() {
   const { t } = useI18n();
   const bridge = useBridge();
   const navigate = useNavigate();
+  const { setPayload } = useCheckinPayload();
   const [searchParams] = useSearchParams();
   const preselectedId = parseId(searchParams.get('event'));
 
@@ -51,7 +53,8 @@ export function CheckinScreen() {
       setScanNotice('not_checkin_qr');
       return;
     }
-    void navigate(`/checkin/qr/${payload.eventId}/${payload.code}`);
+    setPayload(payload);
+    void navigate('/checkin/qr');
   };
 
   const cancelPendingScan = () => {

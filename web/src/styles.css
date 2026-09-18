@@ -1,0 +1,271 @@
+/*
+ * App-level layout only. Colours, typography and component looks come from @maxhub/max-ui
+ * tokens, so light and dark themes follow the MAX client automatically.
+ */
+
+:root {
+  --page-max-width: 720px;
+  --page-gutter: 16px;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background-secondary, Canvas);
+  color: var(--text-primary, CanvasText);
+}
+
+.page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  padding-block: 12px 32px;
+  padding-inline: var(--page-gutter);
+}
+
+.page__header {
+  margin-bottom: 12px;
+  min-height: 40px;
+}
+
+.page__title {
+  margin: 0;
+}
+
+.panel {
+  box-sizing: border-box;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--background-card, Canvas);
+}
+
+.state {
+  min-height: 180px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.state__text {
+  max-width: 40ch;
+}
+
+.muted {
+  color: var(--text-secondary, GrayText);
+}
+
+.inline-error {
+  color: var(--text-negative, #c0392b);
+}
+
+.actions > * {
+  flex: 1 1 auto;
+}
+
+/* Onboarding ------------------------------------------------------------- */
+
+.progress-wrap {
+  padding: 8px 16px 0;
+}
+
+.progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--icon-themed, #2d6cdf);
+}
+
+.step-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--text-tertiary, GrayText);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.step-mark_done {
+  border-color: transparent;
+  background: var(--icon-themed, #2d6cdf);
+  color: var(--text-primary-inverse-static, #fff);
+}
+
+.step-hint {
+  color: var(--text-secondary, GrayText);
+}
+
+/* Forms ------------------------------------------------------------------ */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field__label {
+  font-size: 13px;
+  color: var(--text-secondary, GrayText);
+}
+
+.field__control {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--divider-secondary, rgb(128 128 128 / 40%));
+  border-radius: 12px;
+  background: var(--background-primary, Canvas);
+  color: inherit;
+  font: inherit;
+}
+
+.field__control[aria-invalid='true'] {
+  border-color: var(--text-negative, #c0392b);
+}
+
+.field__control_code {
+  font-size: 24px;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+textarea.field__control {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.field__error {
+  font-size: 13px;
+  color: var(--text-negative, #c0392b);
+}
+
+/* Check-in result -------------------------------------------------------- */
+
+.result {
+  padding: 24px 0;
+  text-align: center;
+  align-items: center;
+}
+
+.result__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  font-size: 32px;
+  line-height: 1;
+  color: var(--text-primary-inverse-static, #fff);
+}
+
+.result_success .result__icon {
+  background: var(--icon-positive, #1f9d55);
+}
+
+.result_error .result__icon {
+  background: var(--icon-negative, #c0392b);
+}
+
+.result > *:last-child {
+  width: 100%;
+}
+
+/* Organizer QR ----------------------------------------------------------- */
+
+/*
+ * The symbol carries its own white plate and quiet zone (see QrCode.tsx), so it scans on either
+ * theme. The screen itself therefore keeps the themed surface: forcing it white would leave the
+ * max-ui buttons below the code drawing dark-theme text on a white background.
+ */
+.qr-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  background: var(--background-secondary, Canvas);
+  color: var(--text-primary, CanvasText);
+}
+
+.qr-screen__canvas {
+  width: min(80vw, 60vh, 420px);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  image-rendering: pixelated;
+  /* Widens the quiet zone into the themed surface so a dark background cannot crowd the symbol. */
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.qr-screen__code {
+  font-size: clamp(36px, 12vw, 64px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+}
+
+.qr-screen__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.qr-screen__actions {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* Attendance ------------------------------------------------------------- */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.attendance {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.attendance th,
+.attendance td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--divider-secondary, rgb(128 128 128 / 25%));
+  white-space: nowrap;
+}
+
+/* Utilities -------------------------------------------------------------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.break-all {
+  word-break: break-all;
+}
+
+@media (min-width: 720px) {
+  .page {
+    padding-block: 24px 48px;
+  }
+}

@@ -2,3 +2,9 @@
 node_modules/
 dist/
 .turbo/
+
+# Claude Code agent worktrees
+.claude/worktrees/
+
+# IDE
+.idea/

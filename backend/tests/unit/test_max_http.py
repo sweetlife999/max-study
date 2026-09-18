@@ -4,6 +4,7 @@ No network: every request is served by httpx.MockTransport, and sleeps are captu
 """
 
 import json
+import ssl
 from collections.abc import Callable
 
 import httpx
@@ -104,6 +105,31 @@ def test_ssl_context_verifies_certificates() -> None:
 
     assert context.verify_mode is not 0  # noqa: F632
     assert context.check_hostname is True
+
+
+async def test_the_client_never_turns_verification_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """§5 keeps verification on: the Ministry CA is *added*, never swapped for `verify=False`.
+
+    ``build_ssl_context`` being correct is not enough — what matters is what the client is
+    actually handed, for the API host and for the upload host alike.
+    """
+    handed: list[object] = []
+
+    class Recording(httpx.AsyncClient):
+        def __init__(self, **kwargs: object) -> None:
+            handed.append(kwargs.get("verify"))
+            super().__init__(**kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(httpx, "AsyncClient", Recording)
+    client = HttpMaxClient(TOKEN)
+    try:
+        assert len(handed) == 2  # the API host and the upload host
+        for verify in handed:
+            assert isinstance(verify, ssl.SSLContext)
+            assert verify.verify_mode == ssl.CERT_REQUIRED
+            assert verify.check_hostname is True
+    finally:
+        await client.aclose()
 
 
 # --- GET /updates -----------------------------------------------------------------------------

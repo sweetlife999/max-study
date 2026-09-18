@@ -2,7 +2,27 @@
 
 import pytest
 
-from campus.max.ratelimit import PerChatLimiter, TokenBucket
+from campus.max.ratelimit import (
+    DEFAULT_GLOBAL_BURST,
+    DEFAULT_GLOBAL_RPS,
+    DEFAULT_PER_CHAT_INTERVAL_SECONDS,
+    PerChatLimiter,
+    TokenBucket,
+)
+
+# dev.max.ru/docs-api: 30 requests per second per domain, and "не более двух сообщений в секунду
+# в один чат". ARCHITECTURE.md §8 spends that budget with headroom: ≤ 25 rps and ≤ 1 msg/s per
+# chat. These are the numbers the defaults must stay inside.
+MAX_DOCUMENTED_RPS = 25.0
+MAX_DOCUMENTED_PER_CHAT_INTERVAL = 1.0
+
+
+def test_the_defaults_stay_inside_the_limits_of_the_contract() -> None:
+    assert DEFAULT_GLOBAL_RPS <= MAX_DOCUMENTED_RPS
+    # A burst larger than the rate would let a whole second's budget go out at once, and then
+    # a second one before the first has refilled.
+    assert DEFAULT_GLOBAL_BURST <= DEFAULT_GLOBAL_RPS
+    assert DEFAULT_PER_CHAT_INTERVAL_SECONDS >= MAX_DOCUMENTED_PER_CHAT_INTERVAL
 
 
 class FakeTime:

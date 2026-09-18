@@ -7,9 +7,7 @@ import type {
 } from './webapp';
 
 export type ScanOutcome =
-  | { status: 'scanned'; text: string }
-  | { status: 'cancelled' }
-  | { status: 'unavailable' };
+  { status: 'scanned'; text: string } | { status: 'cancelled' } | { status: 'unavailable' };
 
 export type ShareOutcome = 'shared' | 'failed' | 'unavailable';
 
@@ -74,14 +72,20 @@ export function createMaxBridge(webApp: WebApp | undefined, search: string): Bri
   const initData = typeof webApp?.initData === 'string' ? webApp.initData : '';
   const isInMax = initData.length > 0;
   const unsafe = webApp?.initDataUnsafe;
-  // Docs: start params arrive in `initDataUnsafe.start_param` and in the `WebAppStartParam`
-  // GET parameter of the mini-app URL.
+  // Documented source: `initDataUnsafe.start_param` (a string, per the Bridge reference — the
+  // introduction page calls it a "WebAppStartParam object", which the shipped script contradicts).
+  // The `?startapp=` fallback is NOT documented; it only makes deeplinks testable in a browser,
+  // where `initData` is absent anyway.
   const startParam =
     (typeof unsafe?.start_param === 'string' && unsafe.start_param) ||
-    new URLSearchParams(search).get('WebAppStartParam') ||
+    new URLSearchParams(search).get('startapp') ||
     null;
   const platform = webApp?.platform ?? null;
-  const canScanQr = isInMax && typeof webApp?.openCodeReader === 'function';
+  const openCodeReader =
+    isInMax && webApp !== undefined && typeof webApp.openCodeReader === 'function'
+      ? webApp.openCodeReader.bind(webApp)
+      : null;
+  const canScanQr = openCodeReader !== null;
 
   return {
     isInMax,
@@ -100,12 +104,10 @@ export function createMaxBridge(webApp: WebApp | undefined, search: string): Bri
     },
 
     async scanQr() {
-      if (!canScanQr || typeof webApp?.openCodeReader !== 'function') {
-        return { status: 'unavailable' };
-      }
+      if (openCodeReader === null) return { status: 'unavailable' };
       try {
         // fileSelect=false: camera only, picking an image from the gallery is not allowed.
-        const text = normalizeScanValue(await webApp.openCodeReader(false));
+        const text = normalizeScanValue(await openCodeReader(false));
         return text ? { status: 'scanned', text } : { status: 'cancelled' };
       } catch (reason) {
         return errorCodeOf(reason).includes('cancel')

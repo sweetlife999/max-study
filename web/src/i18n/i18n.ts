@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext } from 'react';
 
 import type { Lang } from '../api/types';
 import en from './en.json';
@@ -27,20 +27,12 @@ export function translate(lang: Lang, key: MessageKey, params?: MessageParams): 
   });
 }
 
-interface I18nValue {
+export interface I18nValue {
   lang: Lang;
   t: Translate;
 }
 
-const I18nContext = createContext<I18nValue | null>(null);
-
-export function I18nProvider({ lang, children }: { lang: Lang; children: ReactNode }) {
-  const value = useMemo<I18nValue>(
-    () => ({ lang, t: (key, params) => translate(lang, key, params) }),
-    [lang],
-  );
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
-}
+export const I18nContext = createContext<I18nValue | null>(null);
 
 export function useI18n(): I18nValue {
   const value = useContext(I18nContext);

@@ -7,7 +7,9 @@ export function describeError(error: unknown, t: Translate): string {
   if (error.isNetwork) return t('error.network');
   if (error.isRateLimited) {
     return error.retryAfterSeconds
-      ? t('error.rateLimitedWait', { minutes: Math.max(1, Math.ceil(error.retryAfterSeconds / 60)) })
+      ? t('error.rateLimitedWait', {
+          minutes: Math.max(1, Math.ceil(error.retryAfterSeconds / 60)),
+        })
       : t('error.rateLimited');
   }
   if (error.isUnauthorized) return t('error.unauthorized');

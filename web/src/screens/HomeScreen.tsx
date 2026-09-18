@@ -33,7 +33,6 @@ export function HomeScreen() {
             {me.is_organizer && (
               <CellSimple
                 as="button"
-                type="button"
                 showChevron
                 title={t('org.eventsTitle')}
                 onClick={() => void navigate('/org')}
@@ -42,7 +41,6 @@ export function HomeScreen() {
             {me.is_admin && (
               <CellSimple
                 as="button"
-                type="button"
                 showChevron
                 title={t('admin.inviteTitle')}
                 onClick={() => void navigate('/admin/invite')}
@@ -173,7 +171,9 @@ function UpcomingSection() {
             ) : (
               items
                 .slice(0, HOME_EVENTS_LIMIT)
-                .map((event) => <EventCell key={event.id} event={event} to={`/events/${event.id}`} />)
+                .map((event) => (
+                  <EventCell key={event.id} event={event} to={`/events/${event.id}`} />
+                ))
             )
           }
         </QueryState>

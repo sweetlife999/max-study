@@ -239,7 +239,13 @@ function ManualCheckin({
               </span>
             )}
           </label>
-          <Button type="submit" size="large" stretched loading={checkin.isPending} disabled={checkin.isPending}>
+          <Button
+            type="submit"
+            size="large"
+            stretched
+            loading={checkin.isPending}
+            disabled={checkin.isPending}
+          >
             {t('checkin.submit')}
           </Button>
         </Flex>

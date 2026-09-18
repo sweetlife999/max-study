@@ -16,7 +16,12 @@ interface CheckinOutcomeViewProps {
   onTryAgain: () => void;
 }
 
-export function CheckinOutcomeView({ outcome, eventId, onRetry, onTryAgain }: CheckinOutcomeViewProps) {
+export function CheckinOutcomeView({
+  outcome,
+  eventId,
+  onRetry,
+  onTryAgain,
+}: CheckinOutcomeViewProps) {
   const { t } = useI18n();
   const bridge = useBridge();
   const navigate = useNavigate();
@@ -63,7 +68,11 @@ export function CheckinOutcomeView({ outcome, eventId, onRetry, onTryAgain }: Ch
   switch (outcome.failure) {
     case 'code_invalid':
       return (
-        <Result tone="error" title={t('checkin.codeInvalidTitle')} lines={[t('checkin.codeInvalidText')]}>
+        <Result
+          tone="error"
+          title={t('checkin.codeInvalidTitle')}
+          lines={[t('checkin.codeInvalidText')]}
+        >
           <Button size="large" stretched onClick={onTryAgain}>
             {t('checkin.tryAgain')}
           </Button>

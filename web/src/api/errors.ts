@@ -82,7 +82,7 @@ export async function errorFromResponse(response: Response): Promise<ApiError> {
   try {
     body = await response.json();
   } catch {
-    body = null;
+    // Not JSON (HTML error page, empty body): `body` stays null and the status is used instead.
   }
   const retryAfterSeconds = parseRetryAfter(response.headers.get('Retry-After'));
   if (isErrorBody(body)) {
@@ -93,5 +93,9 @@ export async function errorFromResponse(response: Response): Promise<ApiError> {
       retryAfterSeconds,
     });
   }
-  return new ApiError({ status: response.status, code: `http_${response.status}`, retryAfterSeconds });
+  return new ApiError({
+    status: response.status,
+    code: `http_${response.status}`,
+    retryAfterSeconds,
+  });
 }

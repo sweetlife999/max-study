@@ -20,7 +20,10 @@ function resolveTimeZone(timeZone: string): string {
 }
 
 function formatter(lang: Lang, timeZone: string, options: Intl.DateTimeFormatOptions) {
-  return new Intl.DateTimeFormat(LOCALES[lang], { ...options, timeZone: resolveTimeZone(timeZone) });
+  return new Intl.DateTimeFormat(LOCALES[lang], {
+    ...options,
+    timeZone: resolveTimeZone(timeZone),
+  });
 }
 
 const DATE_TIME: Intl.DateTimeFormatOptions = {

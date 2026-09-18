@@ -1,12 +1,8 @@
-import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 
 import type { Bridge } from './bridge';
 
-const BridgeContext = createContext<Bridge | null>(null);
-
-export function BridgeProvider({ bridge, children }: { bridge: Bridge; children: ReactNode }) {
-  return <BridgeContext.Provider value={bridge}>{children}</BridgeContext.Provider>;
-}
+export const BridgeContext = createContext<Bridge | null>(null);
 
 export function useBridge(): Bridge {
   const bridge = useContext(BridgeContext);

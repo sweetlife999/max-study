@@ -32,6 +32,9 @@ import {
 
 const API = '*/api';
 
+/** §7: the attendance export is "CSV UTF-8 с BOM". */
+const UTF8_BOM = String.fromCodePoint(0xfeff);
+
 type ErrorCode =
   | 'unauthorized'
   | 'consent_required'
@@ -91,7 +94,10 @@ function serializeMe(): Me {
     is_organizer: db.me.isOrganizer,
     is_admin: db.me.isAdmin,
     points,
-    university: { name: localize(db.university.name, db.me.lang), timezone: db.university.timezone },
+    university: {
+      name: localize(db.university.name, db.me.lang),
+      timezone: db.university.timezone,
+    },
   };
 }
 
@@ -197,7 +203,9 @@ function checkin(body: CheckinRequest) {
   if (!event.checkinOpen || !isWithinCheckinWindow(event, now)) return apiError('checkin_closed');
   if (!isCodeValid(event.id, body.code, now)) return apiError('invalid_code');
 
-  const pendingSteps = db.steps.filter((step) => step.type === 'event_kind' && !isStepDone(step, db));
+  const pendingSteps = db.steps.filter(
+    (step) => step.type === 'event_kind' && !isStepDone(step, db),
+  );
   db.checkins.set(event.id, { method: body.method, at: now });
   const completed = pendingSteps.find((step) => isStepDone(step, db));
   const result: CheckinResult = {
@@ -420,10 +428,13 @@ export const handlers = [
     guarded(({ params }) => {
       const event = findOwnEvent(params.id);
       if (typeof event === 'string') return apiError(event);
-      const rows = event.others.map(
-        (o) => `${o.userId},${o.firstName},${o.method},${toIso(o.at)}`,
-      );
-      const csv = `﻿user_id,first_name,method,checked_in_at\n${rows.join('\n')}\n`;
+      const db = mockDb();
+      const mine = db.checkins.get(event.id);
+      const rows = [
+        ...event.others.map((o) => `${o.userId},${o.firstName},${o.method},${toIso(o.at)}`),
+        ...(mine ? [`${db.me.id},${db.me.firstName},${mine.method},${toIso(mine.at)}`] : []),
+      ];
+      const csv = `${UTF8_BOM}user_id,first_name,method,checked_in_at\n${rows.join('\n')}\n`;
       return new HttpResponse(csv, { headers: { 'Content-Type': 'text/csv; charset=utf-8' } });
     }),
   ),

@@ -54,9 +54,7 @@ describe('estimateClockOffset', () => {
 
   it('returns 0 for a malformed window', () => {
     expect(estimateClockOffset(input({ expiresAt: 'nope' }))).toBe(0);
-    expect(estimateClockOffset(input({ expiresAt: new Date(WINDOW_START).toISOString() }))).toBe(
-      0,
-    );
+    expect(estimateClockOffset(input({ expiresAt: new Date(WINDOW_START).toISOString() }))).toBe(0);
   });
 });
 

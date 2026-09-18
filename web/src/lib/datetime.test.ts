@@ -21,9 +21,7 @@ describe('zonedWallTime', () => {
 describe('wallTimeToUtcIso', () => {
   it('converts a wall time in the university zone to UTC', () => {
     expect(wallTimeToUtcIso('2026-09-17T12:30', 'Europe/Moscow')).toBe('2026-09-17T09:30:00.000Z');
-    expect(wallTimeToUtcIso('2026-01-01T00:00', 'Asia/Kamchatka')).toBe(
-      '2025-12-31T12:00:00.000Z',
-    );
+    expect(wallTimeToUtcIso('2026-01-01T00:00', 'Asia/Kamchatka')).toBe('2025-12-31T12:00:00.000Z');
   });
 
   it('round-trips with zonedWallTime', () => {

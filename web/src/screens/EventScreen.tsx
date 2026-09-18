@@ -44,7 +44,11 @@ function EventDetails({ event }: { event: Event }) {
             ✓ {t('event.checkedIn')}
           </Typography.Body>
         ) : event.checkin_open ? (
-          <Button size="large" stretched onClick={() => void navigate(`/checkin?event=${event.id}`)}>
+          <Button
+            size="large"
+            stretched
+            onClick={() => void navigate(`/checkin?event=${event.id}`)}
+          >
             {t('event.checkinNow')}
           </Button>
         ) : (

@@ -30,10 +30,7 @@ export function ConsentScreen({ me }: { me: Me }) {
         </CellList>
 
         <CellList mode="island" header={<CellHeader>{t('consent.operatorHeader')}</CellHeader>}>
-          <CellSimple
-            title={me.university.name}
-            subtitle={t('consent.operatorNote')}
-          />
+          <CellSimple title={me.university.name} subtitle={t('consent.operatorNote')} />
         </CellList>
 
         <Typography.Body variant="small" className="muted">

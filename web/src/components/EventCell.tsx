@@ -20,11 +20,13 @@ export function EventCell({ event, to }: { event: Event; to: string }) {
   return (
     <CellSimple
       as="button"
-      type="button"
       showChevron
       overline={event.kind_title}
       title={event.title}
-      subtitle={[formatRange(event.starts_at, event.ends_at, me.university.timezone, lang), ...badges]
+      subtitle={[
+        formatRange(event.starts_at, event.ends_at, me.university.timezone, lang),
+        ...badges,
+      ]
         .filter(Boolean)
         .join(' · ')}
       onClick={() => void navigate(to)}

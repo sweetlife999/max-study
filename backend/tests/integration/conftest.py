@@ -18,7 +18,9 @@ from typing import Any
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from campus.config import UniversityConfig
 from campus.db.session import create_engine
+from tests.integration.factories import World, make_world
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
@@ -95,3 +97,9 @@ async def session(engine: Any) -> AsyncIterator[AsyncSession]:
         await made.close()
         await transaction.rollback()
         await connection.close()
+
+
+@pytest.fixture
+def world(session: AsyncSession, university_config: UniversityConfig) -> World:
+    """Every domain service bound to the test session, plus builders for test data."""
+    return make_world(session, university_config)

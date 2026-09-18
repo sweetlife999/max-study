@@ -15,3 +15,9 @@ htmlcov/
 
 # Local env
 .env
+
+# Claude Code agent worktrees
+.claude/worktrees/
+
+# IDE
+.idea/

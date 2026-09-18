@@ -103,6 +103,10 @@ reminders_before: [PT24H, PT1H]
 ## 7. API мини-приложения
 База `/api`. JSON. Аутентификация — заголовок `X-Max-Init-Data: <initData>` на каждом запросе; проверка подписи и срока (`auth_date` не старше `INIT_DATA_TTL_SECONDS`, default 86400) — **строго по dev.max.ru**. Пользователь создаётся при первом валидном запросе.
 Ошибки: `{"error": {"code": "<snake_case>", "message": "<текст на языке пользователя>"}}` с HTTP-статусом (400/401/403/404/409/422/429).
+
+**Коды ошибок (закрытый список, фронт на них завязан):** `invalid_init_data` (401), `consent_required` (403), `not_organizer` (403), `not_owner` (403), `checkin_closed` (403), `checkin_not_started` (403), `checkin_window_over` (403), `invalid_code` (400), `code_expired` (400), `ambiguous_code` (409), `event_not_found` (404), `step_not_found` (404), `step_not_manual` (409), `invite_invalid` (404), `invite_used` (409), `invite_expired` (409), `rate_limited` (429), `validation_error` (422). Новый код добавляется только вместе с правкой этого списка.
+
+Каждый ответ содержит стандартный HTTP-заголовок `Date` (серверное время, UTC): по нему фронт корректирует расхождение часов клиента при ротации QR. `429` сопровождается `Retry-After` в секундах.
 Пока нет `consent_at`, все эндпоинты, кроме `GET /me`, `POST /me/consent`, `PATCH /me`, отвечают `403 consent_required`.
 
 | Метод | Путь | Кто | Тело → Ответ |
@@ -124,9 +128,12 @@ reminders_before: [PT24H, PT1H]
 | GET | `/api/org/events/{id}/attendance` | владелец | → `{items: [{user_id, first_name, method, checked_in_at}], rsvp_count, checkin_count}` |
 | GET | `/api/org/events/{id}/attendance.csv` | владелец | CSV UTF-8 с BOM |
 | POST | `/api/org/invites` | admin | → `{token, deeplink, expires_at}` |
+| GET | `/api/config` | все | → `{event_kinds: [{key, title, default_points}], onboarding_steps: [{key, type, title, event_kind?}], languages: [..], university: {name, timezone}}` — из YAML вуза (§6). Единственный источник видов активностей и шагов для форм организатора; хардкодить их на фронте запрещено |
 | GET | `/health` | — | → `{status: "ok", db: "ok"}` |
 
 OpenAPI генерируется FastAPI и публикуется в `docs/openapi.json` (CI проверяет, что файл актуален) — фронт генерирует типы из него.
+
+**Приватность кодов отметки:** код не должен попадать в адресную строку мини-приложения и в логи. `start_param` вида `ci_<event>_<code>` читается один раз при старте, отправляется в `POST /api/checkins` и не переносится в путь роутера; в логах `api`, `bot` и Caddy коды, `initData` и `qr_seed` маскируются.
 
 ## 8. Бот
 - **Polling**: `GET /updates` с `marker` из `kv`, таймаут long-poll, маркер сохраняется **после** успешной обработки пачки. Ошибка хендлера одного апдейта логируется и не роняет цикл.

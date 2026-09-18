@@ -1,0 +1,40 @@
+# Static host for the mini-app plus the `/api` proxy. Plain HTTP on :80 — the public domain and
+# TLS are terminated by the deployment branch (docs/ARCHITECTURE.md §3, `deploy/`).
+:80 {
+	log {
+		output stdout
+		format json
+	}
+
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api:8000}
+	}
+
+	handle {
+		root * /srv
+
+		header {
+			# The mini-app is embedded in an iframe by the web version of MAX, so framing must be
+			# allowed for MAX origins instead of denied. `script-src` admits the Bridge CDN;
+			# `style-src 'unsafe-inline'` is required by the inline styles of @maxhub/max-ui.
+			Content-Security-Policy "default-src 'self'; script-src 'self' https://st.max.ru; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors https://max.ru https://*.max.ru https://oneme.ru https://*.oneme.ru"
+			X-Content-Type-Options nosniff
+			Referrer-Policy strict-origin-when-cross-origin
+			Permissions-Policy "geolocation=(), microphone=(), payment=()"
+			-Server
+		}
+
+		# Hashed build assets are immutable; the HTML shell must always be revalidated so a new
+		# deploy reaches clients immediately.
+		@assets path /assets/*
+		@shell not path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		header @shell Cache-Control "no-cache"
+
+		# SPA fallback: deep links such as /events/1 are routed by the client.
+		try_files {path} /index.html
+		file_server
+	}
+}

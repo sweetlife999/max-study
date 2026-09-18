@@ -28,10 +28,18 @@ _DEDUP_INDEX_WHERE = sql_text("dedup_key is not null")
 
 
 def retry_delay(attempts: int) -> timedelta:
-    """Exponential backoff, capped: 30s, 1m, 2m, 4m, ... up to an hour."""
-    exponent = max(0, attempts - 1)
-    delay = OUTBOX_RETRY_BASE_DELAY * (2**exponent)
-    return min(delay, OUTBOX_RETRY_MAX_DELAY)
+    """Exponential backoff, capped: 30s, 1m, 2m, 4m, ... up to an hour.
+
+    The exponent is clamped before the multiplication, not after: ``timedelta * 2**attempts``
+    raises OverflowError long before the cap could be applied, and a row that somehow carried a
+    large ``attempts`` would then take the whole worker down instead of being retried late.
+    """
+    exponent = min(max(0, attempts - 1), _MAX_BACKOFF_EXPONENT)
+    return min(OUTBOX_RETRY_BASE_DELAY * (2**exponent), OUTBOX_RETRY_MAX_DELAY)
+
+
+# Past this the cap has certainly been reached: 30s << an hour << 30s * 2**32.
+_MAX_BACKOFF_EXPONENT = 32
 
 
 @dataclass(frozen=True, slots=True)

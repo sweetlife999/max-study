@@ -58,7 +58,7 @@ def verify(init_data: str, *, now: datetime = NOW, ttl: int = TTL):
     return verify_init_data(init_data, bot_token=BOT_TOKEN, now=now, ttl_seconds=ttl)
 
 
-# --- the documented algorithm --------------------------------------------------------------
+# --- the documented algorithm -----------------------------------------------------------------
 
 
 def test_secret_key_signs_the_token_with_the_literal_salt() -> None:
@@ -107,7 +107,7 @@ def test_start_param_is_exposed_for_deep_link_routing() -> None:
     assert result.start_param == "ci_42_000123"
 
 
-# --- rejection -----------------------------------------------------------------------------
+# --- rejection --------------------------------------------------------------------------------
 
 
 def test_forged_signature_is_rejected() -> None:

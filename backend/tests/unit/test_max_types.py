@@ -127,7 +127,7 @@ def test_message_text_defaults_to_empty_string() -> None:
     assert Message().message_id is None
 
 
-# --- outbound ------------------------------------------------------------------------------
+# --- outbound ---------------------------------------------------------------------------------
 
 
 def test_new_message_body_omits_unset_fields() -> None:

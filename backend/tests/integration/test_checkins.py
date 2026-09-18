@@ -37,7 +37,7 @@ async def _outbox_kinds(world: World, user_id: int) -> list[str]:
     return list(result.scalars().all())
 
 
-# --- the happy path -----------------------------------------------------------------------------
+# --- the happy path ---------------------------------------------------------------------------
 
 
 async def test_a_valid_code_checks_the_student_in(world: World) -> None:
@@ -112,7 +112,7 @@ async def test_a_repeat_check_in_queues_nothing_new(world: World) -> None:
     assert await _outbox_kinds(world, student.id) == before
 
 
-# --- what is refused ----------------------------------------------------------------------------
+# --- what is refused --------------------------------------------------------------------------
 
 
 async def test_an_unknown_method_is_refused(world: World) -> None:
@@ -216,7 +216,7 @@ def seed_showing(world: World, *, event_id: int, code: str) -> bytes:
     raise AssertionError("no colliding seed found")  # pragma: no cover
 
 
-# --- rate limiting ------------------------------------------------------------------------------
+# --- rate limiting ----------------------------------------------------------------------------
 
 
 async def test_every_attempt_past_the_gate_is_recorded(world: World) -> None:
@@ -309,7 +309,7 @@ async def test_the_limit_is_per_user(world: World) -> None:
     assert outcome.already is False
 
 
-# --- what a check-in sets in motion -------------------------------------------------------------
+# --- what a check-in sets in motion -----------------------------------------------------------
 
 
 async def test_a_check_in_queues_a_confirmation(world: World) -> None:
@@ -356,7 +356,7 @@ async def test_a_check_in_closing_no_step_says_so(world: World) -> None:
     assert outcome.completed_step_key is None
 
 
-# --- the view the api returns -------------------------------------------------------------------
+# --- the view the api returns -----------------------------------------------------------------
 
 
 async def test_the_result_view_carries_the_event_and_the_step(world: World) -> None:

@@ -16,7 +16,7 @@ from campus.domain.errors import (
 )
 from tests.integration.factories import BOT_USERNAME, World
 
-# --- creation -----------------------------------------------------------------------------------
+# --- creation ---------------------------------------------------------------------------------
 
 
 async def test_creation_stores_the_contract_fields(world: World) -> None:
@@ -124,7 +124,7 @@ async def test_overlong_title_is_refused(world: World) -> None:
         await world.event(organizer=organizer, title="я" * 201)
 
 
-# --- editing ------------------------------------------------------------------------------------
+# --- editing ----------------------------------------------------------------------------------
 
 
 async def test_update_touches_only_the_fields_passed(world: World) -> None:
@@ -180,7 +180,7 @@ async def test_update_can_open_check_in(world: World) -> None:
     assert event.checkin_open is True
 
 
-# --- ownership and lookup -------------------------------------------------------------------------
+# --- ownership and lookup ---------------------------------------------------------------------
 
 
 async def test_require_raises_for_a_missing_event(world: World) -> None:
@@ -198,7 +198,7 @@ async def test_only_the_owner_passes_the_ownership_check(world: World) -> None:
         world.events.require_owner(event, other)
 
 
-# --- listings -----------------------------------------------------------------------------------
+# --- listings ---------------------------------------------------------------------------------
 
 
 async def test_upcoming_holds_everything_that_has_not_ended(world: World) -> None:
@@ -287,7 +287,7 @@ async def test_an_event_is_out_of_the_window_more_than_thirty_minutes_early(worl
     assert await world.events.list_open_for_checkin() == []
 
 
-# --- codes --------------------------------------------------------------------------------------
+# --- codes ------------------------------------------------------------------------------------
 
 
 async def test_the_current_code_matches_the_deep_link(world: World) -> None:
@@ -341,7 +341,7 @@ async def test_another_events_code_is_refused(world: World) -> None:
     assert world.events.verify_code(mine, world.code_for(other)) is False
 
 
-# --- views --------------------------------------------------------------------------------------
+# --- views ------------------------------------------------------------------------------------
 
 
 async def test_the_view_carries_what_the_api_promises(world: World) -> None:

@@ -63,7 +63,7 @@ async def recorder() -> Recorder:
     return Recorder()
 
 
-# --- authentication and transport -----------------------------------------------------------
+# --- authentication and transport -------------------------------------------------------------
 
 
 async def test_token_goes_in_the_authorization_header_verbatim() -> None:
@@ -106,7 +106,7 @@ def test_ssl_context_verifies_certificates() -> None:
     assert context.check_hostname is True
 
 
-# --- GET /updates ---------------------------------------------------------------------------
+# --- GET /updates -----------------------------------------------------------------------------
 
 
 async def test_get_updates_sends_the_documented_parameters() -> None:
@@ -161,7 +161,7 @@ async def test_get_updates_parses_events() -> None:
     assert len(page.updates) == 1
 
 
-# --- POST /messages -------------------------------------------------------------------------
+# --- POST /messages ---------------------------------------------------------------------------
 
 
 async def test_send_message_puts_the_recipient_in_the_query_and_the_body_in_json() -> None:
@@ -216,7 +216,7 @@ async def test_disable_link_preview_is_a_query_parameter() -> None:
     assert rec.last.url.params["disable_link_preview"] == "true"
 
 
-# --- PUT / DELETE /messages, POST /answers ---------------------------------------------------
+# --- PUT / DELETE /messages, POST /answers ----------------------------------------------------
 
 
 async def test_edit_message_passes_message_id_as_a_query_parameter() -> None:
@@ -266,7 +266,7 @@ async def test_answer_callback_can_acknowledge_without_editing() -> None:
     assert json.loads(rec.last.content) == {}
 
 
-# --- POST /uploads --------------------------------------------------------------------------
+# --- POST /uploads ----------------------------------------------------------------------------
 
 
 async def test_upload_image_asks_for_an_url_then_posts_the_bytes() -> None:
@@ -317,7 +317,7 @@ async def test_upload_without_any_token_is_an_error() -> None:
         await client.upload_image(content=b"png")
 
 
-# --- failures and retries --------------------------------------------------------------------
+# --- failures and retries ---------------------------------------------------------------------
 
 
 async def test_429_is_retried_after_the_delay_max_asked_for() -> None:

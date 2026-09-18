@@ -16,8 +16,8 @@ body,
 
 body {
   margin: 0;
-  background: var(--max-bg-secondary, Canvas);
-  color: var(--max-text-primary, CanvasText);
+  background: var(--background-secondary, Canvas);
+  color: var(--text-primary, CanvasText);
 }
 
 .page {
@@ -42,7 +42,7 @@ body {
   box-sizing: border-box;
   padding: 16px;
   border-radius: 16px;
-  background: var(--max-bg-primary, Canvas);
+  background: var(--background-card, Canvas);
 }
 
 .state {
@@ -56,11 +56,11 @@ body {
 }
 
 .muted {
-  color: var(--max-text-secondary, GrayText);
+  color: var(--text-secondary, GrayText);
 }
 
 .inline-error {
-  color: var(--max-text-negative, #c0392b);
+  color: var(--text-negative, #c0392b);
 }
 
 .actions > * {
@@ -76,7 +76,7 @@ body {
 .progress {
   width: 100%;
   height: 8px;
-  accent-color: var(--max-bg-accent, #2d6cdf);
+  accent-color: var(--icon-themed, #2d6cdf);
 }
 
 .step-mark {
@@ -86,19 +86,19 @@ body {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  border: 2px solid var(--max-text-tertiary, GrayText);
+  border: 2px solid var(--text-tertiary, GrayText);
   font-size: 14px;
   line-height: 1;
 }
 
 .step-mark_done {
   border-color: transparent;
-  background: var(--max-bg-accent, #2d6cdf);
-  color: #fff;
+  background: var(--icon-themed, #2d6cdf);
+  color: var(--text-primary-inverse-static, #fff);
 }
 
 .step-hint {
-  color: var(--max-text-secondary, GrayText);
+  color: var(--text-secondary, GrayText);
 }
 
 /* Forms ------------------------------------------------------------------ */
@@ -111,7 +111,7 @@ body {
 
 .field__label {
   font-size: 13px;
-  color: var(--max-text-secondary, GrayText);
+  color: var(--text-secondary, GrayText);
 }
 
 .field__control {
@@ -119,15 +119,15 @@ body {
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
-  border: 1px solid var(--max-outline-secondary, rgb(128 128 128 / 40%));
+  border: 1px solid var(--divider-secondary, rgb(128 128 128 / 40%));
   border-radius: 12px;
-  background: var(--max-bg-primary, Canvas);
+  background: var(--background-primary, Canvas);
   color: inherit;
   font: inherit;
 }
 
 .field__control[aria-invalid='true'] {
-  border-color: var(--max-text-negative, #c0392b);
+  border-color: var(--text-negative, #c0392b);
 }
 
 .field__control_code {
@@ -143,7 +143,7 @@ textarea.field__control {
 
 .field__error {
   font-size: 13px;
-  color: var(--max-text-negative, #c0392b);
+  color: var(--text-negative, #c0392b);
 }
 
 /* Check-in result -------------------------------------------------------- */
@@ -163,15 +163,15 @@ textarea.field__control {
   border-radius: 50%;
   font-size: 32px;
   line-height: 1;
-  color: #fff;
+  color: var(--text-primary-inverse-static, #fff);
 }
 
 .result_success .result__icon {
-  background: var(--max-bg-positive, #1f9d55);
+  background: var(--icon-positive, #1f9d55);
 }
 
 .result_error .result__icon {
-  background: var(--max-bg-negative, #c0392b);
+  background: var(--icon-negative, #c0392b);
 }
 
 .result > *:last-child {
@@ -180,6 +180,11 @@ textarea.field__control {
 
 /* Organizer QR ----------------------------------------------------------- */
 
+/*
+ * The symbol carries its own white plate and quiet zone (see QrCode.tsx), so it scans on either
+ * theme. The screen itself therefore keeps the themed surface: forcing it white would leave the
+ * max-ui buttons below the code drawing dark-theme text on a white background.
+ */
 .qr-screen {
   display: flex;
   flex-direction: column;
@@ -188,8 +193,8 @@ textarea.field__control {
   padding: 16px;
   min-height: 100dvh;
   box-sizing: border-box;
-  background: #fff;
-  color: #111;
+  background: var(--background-secondary, Canvas);
+  color: var(--text-primary, CanvasText);
 }
 
 .qr-screen__canvas {
@@ -197,6 +202,9 @@ textarea.field__control {
   height: auto;
   aspect-ratio: 1 / 1;
   image-rendering: pixelated;
+  /* Widens the quiet zone into the themed surface so a dark background cannot crowd the symbol. */
+  padding: 12px;
+  border-radius: 12px;
   background: #fff;
 }
 
@@ -235,7 +243,7 @@ textarea.field__control {
 .attendance td {
   padding: 8px 12px;
   text-align: left;
-  border-bottom: 1px solid var(--max-outline-secondary, rgb(128 128 128 / 25%));
+  border-bottom: 1px solid var(--divider-secondary, rgb(128 128 128 / 25%));
   white-space: nowrap;
 }
 

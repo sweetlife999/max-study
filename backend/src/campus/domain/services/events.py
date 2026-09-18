@@ -145,27 +145,39 @@ class EventService(Service):
         onboarding_step: str | None = UNSET,
         checkin_open: bool = UNSET,
     ) -> Event:
-        """Patch the fields that were actually passed; ``None`` clears ``onboarding_step``."""
+        """Patch the fields that were actually passed; ``None`` clears ``onboarding_step``.
+
+        Every value is validated *before* the first one is assigned, so a rejected patch leaves
+        the event exactly as it was — the api commits its transaction on a domain error (§5's
+        attempt ledger depends on that) and must never find half-applied changes.
+        """
+        changes: dict[str, Any] = {}
         if title is not UNSET:
-            event.title = _require_text(title, "title", MAX_TITLE_LENGTH)
+            changes["title"] = _require_text(title, "title", MAX_TITLE_LENGTH)
         if description is not UNSET:
-            event.description = _optional_text(description, "description", MAX_DESCRIPTION_LENGTH)
+            changes["description"] = _optional_text(
+                description, "description", MAX_DESCRIPTION_LENGTH
+            )
         if kind is not UNSET:
             self._require_kind(kind)
-            event.kind = kind
+            changes["kind"] = kind
         if location is not UNSET:
-            event.location = _optional_text(location, "location", MAX_LOCATION_LENGTH)
+            changes["location"] = _optional_text(location, "location", MAX_LOCATION_LENGTH)
         if starts_at is not UNSET:
-            event.starts_at = require_aware(starts_at, "starts_at")
+            changes["starts_at"] = require_aware(starts_at, "starts_at")
         if ends_at is not UNSET:
-            event.ends_at = require_aware(ends_at, "ends_at")
+            changes["ends_at"] = require_aware(ends_at, "ends_at")
         if points is not UNSET:
-            event.points = _require_points(points)
+            changes["points"] = _require_points(points)
         if onboarding_step is not UNSET:
-            event.onboarding_step = self._require_step(onboarding_step)
+            changes["onboarding_step"] = self._require_step(onboarding_step)
         if checkin_open is not UNSET:
-            event.checkin_open = bool(checkin_open)
-        _require_time_range(event.starts_at, event.ends_at)
+            changes["checkin_open"] = bool(checkin_open)
+        _require_time_range(
+            changes.get("starts_at", event.starts_at), changes.get("ends_at", event.ends_at)
+        )
+        for field, value in changes.items():
+            setattr(event, field, value)
         await self.session.flush()
         return event
 

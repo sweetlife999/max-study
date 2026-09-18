@@ -85,7 +85,9 @@ class World:
 
     # --- builders ----------------------------------------------------------------------------
 
-    async def user(self, *, first_name: str = "Аня", lang: str = "ru", consent: bool = True) -> User:
+    async def user(
+        self, *, first_name: str = "Аня", lang: str = "ru", consent: bool = True
+    ) -> User:
         created = await self.users.get_or_create(
             max_user_id=next_max_user_id(), first_name=first_name, lang=lang
         )

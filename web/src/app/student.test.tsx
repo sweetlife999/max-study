@@ -36,6 +36,7 @@ describe('consent gate', () => {
 
     expect(await screen.findByText('Consent to data processing')).toBeInTheDocument();
     expect(mockDb().me.lang).toBe('en');
+    expect(document.documentElement).toHaveAttribute('lang', 'en');
   });
 
   it('opens the app once consent is given', async () => {
@@ -181,6 +182,7 @@ describe('the profile', () => {
 
     expect(await screen.findByRole('heading', { name: 'Profile' })).toBeInTheDocument();
     expect(mockDb().me.lang).toBe('en');
+    expect(document.documentElement).toHaveAttribute('lang', 'en');
   });
 });
 

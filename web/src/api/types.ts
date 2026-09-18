@@ -130,3 +130,15 @@ export interface ApiErrorBody {
     message: string;
   };
 }
+
+export interface AppConfig {
+  event_kinds: { key: string; title: string; default_points: number }[];
+  onboarding_steps: {
+    key: string;
+    type: OnboardingStepType;
+    title: string;
+    event_kind?: string | null;
+  }[];
+  languages: Lang[];
+  university: University;
+}

@@ -219,6 +219,27 @@ function checkin(body: CheckinRequest) {
 
 export const handlers = [
   http.get(
+    `${API}/config`,
+    guarded(() => {
+      const db = mockDb();
+      return HttpResponse.json({
+        event_kinds: db.kinds.map((kind) => ({
+          key: kind.key,
+          title: localize(kind.title, db.me.lang),
+          default_points: kind.defaultPoints,
+        })),
+        onboarding_steps: db.steps.map((step) => ({
+          key: step.key,
+          type: step.type,
+          title: localize(step.title, db.me.lang),
+          ...(step.eventKind ? { event_kind: step.eventKind } : {}),
+        })),
+        languages: ['ru', 'en'],
+        university: serializeMe().university,
+      });
+    }),
+  ),
+  http.get(
     `${API}/me`,
     guarded(() => HttpResponse.json(serializeMe()), { allowWithoutConsent: true }),
   ),

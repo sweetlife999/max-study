@@ -1,5 +1,6 @@
 import { ApiError, CLIENT_ERROR_CODES, errorFromResponse } from './errors';
 import type {
+  AppConfig,
   Attendance,
   CheckinRequest,
   CheckinResult,
@@ -80,6 +81,7 @@ export function createApiClient(options: ApiClientOptions) {
   const orgEventPath = (id: number) => `/org/events/${encodeURIComponent(String(id))}`;
 
   return {
+    getConfig: () => json<AppConfig>('GET', '/config'),
     getMe: () => json<Me>('GET', '/me'),
     giveConsent: () => json<Me>('POST', '/me/consent'),
     updateLang: (lang: Lang) => json<Me>('PATCH', '/me', { lang }),

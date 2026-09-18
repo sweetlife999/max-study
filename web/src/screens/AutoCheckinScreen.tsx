@@ -1,20 +1,19 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import { useCheckinMutation } from '../api/queries';
 import { CheckinOutcomeView } from '../components/CheckinOutcomeView';
 import { Page } from '../components/Page';
 import { LoadingState } from '../components/states';
 import { useI18n } from '../i18n/i18n';
-import { parseCheckinStartParam } from '../lib/checkinPayload';
+import { useCheckinPayload } from '../app/checkinPayload';
 import { outcomeFromError, outcomeFromResult } from '../lib/checkinOutcome';
 import { InvalidCheckinLink } from './InvalidCheckinLink';
 
-/** `/checkin/qr/:eventId/:code` — reached from a scanned QR or a `ci_…` start_param. */
+/** `/checkin/qr` — reached from a scanned QR or a `ci_…` start_param. */
 export function AutoCheckinScreen() {
   const { t } = useI18n();
-  const params = useParams();
-  const payload = parseCheckinStartParam(`ci_${params.eventId ?? ''}_${params.code ?? ''}`);
+  const { payload } = useCheckinPayload();
 
   return (
     <Page title={t('checkin.title')} backTo="/">

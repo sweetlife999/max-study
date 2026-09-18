@@ -1,6 +1,7 @@
 import { render, type RenderResult } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { useEffect } from 'react';
+import { MemoryRouter, useLocation } from 'react-router';
 
 import { createApiClient, DEFAULT_API_BASE_URL } from '../api/client';
 import { createQueryClient } from '../api/queries';
@@ -12,6 +13,7 @@ import { FakeBridge, type FakeBridgeOptions } from '../bridge/fake';
 export interface RenderAppOptions {
   /** Initial route; defaults to the main screen. */
   route?: string;
+  onLocation?: (location: ReturnType<typeof useLocation>) => void;
   bridge?: FakeBridge;
   bridgeOptions?: FakeBridgeOptions;
   /** Set when the test installs `vi.useFakeTimers()`, so user-event can drive them. */
@@ -37,6 +39,7 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   const result = render(
     <AppProviders bridge={bridge} api={api} queryClient={createQueryClient()}>
       <MemoryRouter initialEntries={[options.route ?? '/']}>
+        <LocationProbe onLocation={options.onLocation} />
         <SessionGate>
           <AppRoutes />
         </SessionGate>
@@ -45,4 +48,12 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   );
 
   return { ...result, bridge, user };
+}
+
+function LocationProbe({ onLocation }: { onLocation: RenderAppOptions['onLocation'] }) {
+  const location = useLocation();
+  useEffect(() => {
+    onLocation?.(location);
+  }, [location, onLocation]);
+  return null;
 }

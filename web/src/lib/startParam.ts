@@ -16,6 +16,6 @@ export const CHECKIN_PAYLOAD_PREFIX = 'ci_';
 export function startParamRoute(startParam: string | null | undefined): string | null {
   if (typeof startParam !== 'string' || startParam === '') return null;
   const payload = parseCheckinStartParam(startParam);
-  if (payload) return `/checkin/qr/${payload.eventId}/${payload.code}`;
+  if (payload) return '/checkin/qr';
   return startParam.startsWith(CHECKIN_PAYLOAD_PREFIX) ? INVALID_CHECKIN_ROUTE : null;
 }

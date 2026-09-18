@@ -16,6 +16,7 @@ const MAX_RETRIES = 2;
 
 export const queryKeys = {
   me: ['me'] as const,
+  config: ['config'] as const,
   onboarding: ['onboarding'] as const,
   events: (scope: EventScope) => ['events', scope] as const,
   event: (id: number) => ['event', id] as const,
@@ -49,6 +50,11 @@ export function createQueryClient(): QueryClient {
   return client;
 }
 
+export function useConfigQuery() {
+  const api = useApi();
+  return useQuery({ queryKey: queryKeys.config, queryFn: api.getConfig });
+}
+
 export function useMeQuery() {
   const api = useApi();
   return useQuery({ queryKey: queryKeys.me, queryFn: api.getMe, staleTime: 60_000 });
@@ -64,9 +70,16 @@ export function useEventsQuery(scope: EventScope) {
   return useQuery({ queryKey: queryKeys.events(scope), queryFn: () => api.listEvents(scope) });
 }
 
-export function useEventQuery(id: number) {
+export function useEventQuery(id: number, options: { poll?: boolean } = {}) {
   const api = useApi();
-  return useQuery({ queryKey: queryKeys.event(id), queryFn: () => api.getEvent(id) });
+  return useQuery({
+    queryKey: queryKeys.event(id),
+    queryFn: () => api.getEvent(id),
+    refetchInterval: (query) =>
+      options.poll && query.state.status !== 'error' && query.state.data?.checkin_open
+        ? ATTENDANCE_POLL_MS
+        : false,
+  });
 }
 
 export function useOrgEventsQuery() {
@@ -79,7 +92,8 @@ export function useAttendanceQuery(id: number, options: { poll?: boolean } = {})
   return useQuery({
     queryKey: queryKeys.attendance(id),
     queryFn: () => api.getAttendance(id),
-    refetchInterval: options.poll ? ATTENDANCE_POLL_MS : false,
+    refetchInterval: (query) =>
+      options.poll && query.state.status !== 'error' ? ATTENDANCE_POLL_MS : false,
     staleTime: 0,
   });
 }

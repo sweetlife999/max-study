@@ -33,7 +33,7 @@
 		header @assets Cache-Control "public, max-age=31536000, immutable"
 		header @shell Cache-Control "no-cache"
 
-		# SPA fallback: deep links such as /checkin/qr/1/123456 are routed by the client.
+		# SPA fallback: deep links such as /events/1 are routed by the client.
 		try_files {path} /index.html
 		file_server
 	}

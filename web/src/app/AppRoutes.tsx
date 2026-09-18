@@ -1,3 +1,7 @@
+import { useState } from 'react';
+import type { CheckinPayload } from '../lib/checkinPayload';
+import { CheckinPayloadContext } from './checkinPayload';
+
 import { Route, Routes } from 'react-router';
 
 import { NotFoundState } from '../components/NotFound';
@@ -20,15 +24,16 @@ import { StartParamRedirect } from './StartParamRedirect';
 
 export function AppRoutes() {
   const { t } = useI18n();
+  const [payload, setPayload] = useState<CheckinPayload | null>(null);
   return (
-    <>
+    <CheckinPayloadContext.Provider value={{ payload, setPayload }}>
       <StartParamRedirect />
       <Routes>
         <Route path="/" element={<HomeScreen />} />
         <Route path="/events" element={<EventsScreen />} />
         <Route path="/events/:id" element={<EventScreen />} />
         <Route path="/checkin" element={<CheckinScreen />} />
-        <Route path="/checkin/qr/:eventId/:code" element={<AutoCheckinScreen />} />
+        <Route path="/checkin/qr" element={<AutoCheckinScreen />} />
         <Route
           path="/checkin/invalid"
           element={
@@ -54,6 +59,6 @@ export function AppRoutes() {
           }
         />
       </Routes>
-    </>
+    </CheckinPayloadContext.Provider>
   );
 }

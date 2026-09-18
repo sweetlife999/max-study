@@ -1,24 +1,13 @@
 import { isApiError } from '../api/errors';
 import type { CheckinResult } from '../api/types';
 
-/**
- * §7 does not enumerate error codes of `POST /api/checkins`. These sets hold the codes we expect
- * the backend to use; anything else still gets a sensible screen via HTTP status and the
- * server-provided localized message.
- */
-export const INVALID_CODE_ERRORS: ReadonlySet<string> = new Set([
-  'invalid_code',
-  'code_invalid',
-  'code_expired',
-  'expired_code',
-  'invalid_or_expired_code',
-]);
+/** Closed API error list from docs/ARCHITECTURE.md §7. */
+export const INVALID_CODE_ERRORS: ReadonlySet<string> = new Set(['invalid_code', 'code_expired']);
 
 export const CHECKIN_CLOSED_ERRORS: ReadonlySet<string> = new Set([
   'checkin_closed',
-  'checkin_not_open',
-  'checkin_window_closed',
-  'outside_checkin_window',
+  'checkin_not_started',
+  'checkin_window_over',
 ]);
 
 export type CheckinFailure = 'code_invalid' | 'closed' | 'rate_limited' | 'not_found' | 'other';

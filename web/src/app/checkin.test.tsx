@@ -1,8 +1,11 @@
 import { screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+
+import { server } from '../mocks/server';
 
 import { FakeBridge } from '../bridge/fake';
 import { currentWindow, MOCK_BOT_USERNAME, mockCode, mockDb } from '../mocks/db';
-import { renderApp } from '../test/render';
+import { renderApp, type RenderAppOptions } from '../test/render';
 
 /** Event 1 of the mock seed: check-in open and inside its time window. */
 const OPEN_EVENT_ID = 1;
@@ -23,7 +26,9 @@ describe('automatic check-in from a start_param', () => {
   beforeEach(consent);
 
   it('checks the student in and shows the points earned', async () => {
+    const onLocation = vi.fn<NonNullable<RenderAppOptions['onLocation']>>();
     renderApp({
+      onLocation,
       bridgeOptions: { startParam: `ci_${OPEN_EVENT_ID}_${validCode(OPEN_EVENT_ID)}` },
     });
 
@@ -32,6 +37,8 @@ describe('automatic check-in from a start_param', () => {
     // Always a way forward.
     expect(screen.getByRole('button', { name: 'На главную' })).toBeInTheDocument();
     expect(mockDb().checkins.has(OPEN_EVENT_ID)).toBe(true);
+    expect(onLocation.mock.calls.map(([location]) => location.pathname)).toContain('/checkin/qr');
+    expect(JSON.stringify(onLocation.mock.calls)).not.toContain(validCode(OPEN_EVENT_ID));
   });
 
   it('reports a repeated check-in as success, not as an error', async () => {
@@ -93,6 +100,27 @@ describe('automatic check-in from a start_param', () => {
     renderApp({ bridgeOptions: { startParam: 'promo_summer2025' } });
 
     expect(await screen.findByRole('heading', { name: /Привет, Демо/ })).toBeInTheDocument();
+  });
+
+  it('shows a network failure and retries only after an explicit request', async () => {
+    let calls = 0;
+    server.use(
+      http.post('*/api/checkins', () => {
+        calls += 1;
+        return HttpResponse.error();
+      }),
+    );
+    const { user } = renderApp({
+      bridgeOptions: { startParam: `ci_${OPEN_EVENT_ID}_${validCode(OPEN_EVENT_ID)}` },
+    });
+
+    expect(await screen.findByText(/Нет связи с сервером/)).toBeInTheDocument();
+    expect(calls).toBe(1);
+    expect(mockDb().checkins.has(OPEN_EVENT_ID)).toBe(false);
+    server.resetHandlers();
+    await user.click(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByText('Вы отметились')).toBeInTheDocument();
+    expect(mockDb().attempts).toHaveLength(1);
   });
 
   it('sends exactly one check-in request per payload', async () => {

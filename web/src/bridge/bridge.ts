@@ -147,11 +147,16 @@ export function createMaxBridge(webApp: WebApp | undefined, search: string): Bri
     async share({ text, link }) {
       if (!isInMax) return 'unavailable';
       try {
-        if (typeof webApp?.shareMaxContent === 'function') {
+        // `shareContent` is the documented text/link share ("Контакты и шеринг"); in
+        // max-web-app.js it posts `WebAppShare` with the params untouched. `shareMaxContent`
+        // is for forwarding a message the bot already sent (it expects `mid`/`chatType`), so
+        // it is deliberately not used here.
+        if (typeof webApp?.shareContent === 'function') {
           const params: WebAppShareTextParams = link ? { text, link } : { text };
-          await webApp.shareMaxContent(params);
+          await webApp.shareContent(params);
           return 'shared';
         }
+        // Older clients without `shareContent`: the documented `:share` deeplink.
         if (typeof webApp?.openMaxLink === 'function') {
           webApp.openMaxLink(buildShareDeeplink(link ? `${text}\n${link}` : text));
           return 'shared';

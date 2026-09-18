@@ -51,7 +51,8 @@ export interface WebApp {
 
   openLink?: (url: string) => void;
   openMaxLink?: (url: string) => void;
-  shareMaxContent?: (params: WebAppShareTextParams) => Promise<unknown>;
+  /** Native share sheet for text and links (`WebAppShare`). */
+  shareContent?: (params: WebAppShareTextParams) => Promise<unknown>;
 
   requestScreenMaxBrightness?: () => Promise<unknown>;
   restoreScreenBrightness?: () => Promise<unknown>;

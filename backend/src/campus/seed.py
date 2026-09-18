@@ -11,7 +11,6 @@ organizer without an admin id in the environment.
 
 import asyncio
 import logging
-import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timedelta
@@ -34,6 +33,7 @@ from campus.domain.services import (
     UserService,
 )
 from campus.domain.views import InviteView
+from campus.logs import configure_logging
 
 logger = logging.getLogger("campus.seed")
 
@@ -301,6 +301,7 @@ async def _invitation(
 
 async def _run() -> SeedReport:
     settings = Settings.from_env()
+    configure_logging(settings.log_level)
     university = load_university_config(settings.university_config_path)
     config = DomainConfig.from_settings(settings, university)
     engine = create_engine(settings.database_url)
@@ -313,7 +314,6 @@ async def _run() -> SeedReport:
 
 
 def main() -> int:
-    logging.basicConfig(level="INFO", format="%(message)s", stream=sys.stderr)
     report = asyncio.run(_run())
     for line in report.lines():
         print(line)

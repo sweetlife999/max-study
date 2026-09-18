@@ -33,11 +33,13 @@ def test_bundles_define_exactly_the_same_keys() -> None:
         assert lang_keys == reference, f"{lang} differs: {lang_keys ^ reference}"
 
 
-def test_every_domain_error_code_has_a_message() -> None:
+def test_every_domain_error_has_a_message() -> None:
     loaded = translator()
 
     missing = [
-        cls.code for cls in all_error_classes() if not loaded.has(f"{ERROR_KEY_PREFIX}{cls.code}")
+        cls.message_key
+        for cls in all_error_classes()
+        if not loaded.has(f"{ERROR_KEY_PREFIX}{cls.message_key}")
     ]
 
     assert missing == []
@@ -45,7 +47,7 @@ def test_every_domain_error_code_has_a_message() -> None:
 
 def test_every_error_message_belongs_to_a_domain_error() -> None:
     loaded = translator()
-    known = {cls.code for cls in all_error_classes()}
+    known = {cls.message_key for cls in all_error_classes()}
 
     orphans = [
         key.removeprefix(ERROR_KEY_PREFIX)
@@ -67,7 +69,9 @@ def test_no_message_is_empty() -> None:
 def test_error_lookup_uses_the_requested_language() -> None:
     loaded = translator()
 
-    assert loaded.error("en", DomainError.code) != loaded.error("ru", DomainError.code)
+    assert loaded.error("en", DomainError.message_key) != loaded.error(
+        "ru", DomainError.message_key
+    )
 
 
 def test_unknown_language_falls_back_to_the_default() -> None:

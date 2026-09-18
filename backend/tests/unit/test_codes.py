@@ -161,3 +161,89 @@ def test_new_seed_is_32_random_bytes() -> None:
     first, second = codes.new_seed(), codes.new_seed()
     assert len(first) == 32
     assert first != second
+
+
+# --- classification: accepted, merely stale, or never ours (§7 `invalid_code` / `code_expired`)
+
+
+LOOKBACK = 12
+
+
+def classify(code: str, unix: float) -> codes.CodeVerdict:
+    return codes.classify_code(
+        SEED,
+        EVENT_ID,
+        code,
+        now=at(unix),
+        step_seconds=STEP,
+        tolerance_steps=TOLERANCE,
+        expired_lookback_steps=LOOKBACK,
+    )
+
+
+def test_classify_calls_an_accepted_window_valid() -> None:
+    code = codes.compute_code(SEED, EVENT_ID, 1000)
+
+    assert classify(code, 10_000) == "valid"
+    assert classify(code, 10_020) == "valid"
+
+
+def test_classify_calls_a_window_past_the_tolerance_expired() -> None:
+    code = codes.compute_code(SEED, EVENT_ID, 1000)
+
+    assert classify(code, 10_030) == "expired"
+    assert classify(code, 10_110) == "expired"
+
+
+def test_classify_stops_looking_back_beyond_the_lookback() -> None:
+    code = codes.compute_code(SEED, EVENT_ID, 1000)
+
+    # Window 1000 is 13 steps behind window 1013 — one more than the lookback allows.
+    assert classify(code, 10_130) == "invalid"
+
+
+def test_classify_never_calls_a_future_window_expired() -> None:
+    code = codes.compute_code(SEED, EVENT_ID, 1001)
+
+    assert classify(code, 10_000) == "invalid"
+
+
+@pytest.mark.parametrize("bad", ["", "12345", "1234567", "abcdef", "12345a", "１２３４５６"])
+def test_classify_rejects_malformed_codes(bad: str) -> None:
+    assert classify(bad, 10_000) == "invalid"
+
+
+def test_classify_never_looks_at_negative_windows() -> None:
+    assert classify(codes.compute_code(SEED, EVENT_ID, 0), 5) == "valid"
+
+
+def test_classify_rejects_a_negative_lookback() -> None:
+    with pytest.raises(ValueError, match="expired_lookback_steps"):
+        classify_with_lookback("000000", -1)
+
+
+def classify_with_lookback(code: str, lookback: int) -> codes.CodeVerdict:
+    return codes.classify_code(
+        SEED,
+        EVENT_ID,
+        code,
+        now=at(10_000),
+        step_seconds=STEP,
+        tolerance_steps=TOLERANCE,
+        expired_lookback_steps=lookback,
+    )
+
+
+def test_a_lookback_below_the_tolerance_never_reports_expired() -> None:
+    code = codes.compute_code(SEED, EVENT_ID, 997)  # one step past the tolerance at window 1000
+
+    assert classify(code, 10_000) == "expired"
+    assert classify_with_lookback(code, 0) == "invalid"
+
+
+def test_classify_agrees_with_verify_on_what_is_accepted() -> None:
+    for offset in range(0, LOOKBACK + 2):
+        code = codes.compute_code(SEED, EVENT_ID, 1000 - offset)
+        accepted = _verify(code, at(10_000))
+
+        assert (classify(code, 10_000) == "valid") == accepted

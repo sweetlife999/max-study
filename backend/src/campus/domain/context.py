@@ -18,6 +18,11 @@ CHECKIN_WINDOW_MARGIN = timedelta(minutes=30)
 CHECKIN_RATE_LIMIT_ATTEMPTS = 10
 CHECKIN_RATE_LIMIT_WINDOW = timedelta(minutes=10)
 
+# §7 separates `invalid_code` from `code_expired`. This is how far back a code is still recognised
+# as this event's own, only stale — long enough to cover a slow scan-to-request round trip. It
+# changes the *message*, never what is accepted: that stays CHECKIN_CODE_TOLERANCE_STEPS (§5).
+CHECKIN_CODE_EXPIRED_LOOKBACK = timedelta(minutes=2)
+
 # ARCHITECTURE.md §8.
 OUTBOX_MAX_ATTEMPTS = 5
 OUTBOX_RETRY_BASE_DELAY = timedelta(seconds=30)
@@ -46,6 +51,15 @@ class DomainConfig:
             checkin_code_tolerance_steps=settings.checkin_code_tolerance_steps,
             bot_username=settings.max_bot_username,
         )
+
+    @property
+    def checkin_code_expired_lookback_steps(self) -> int:
+        """:data:`CHECKIN_CODE_EXPIRED_LOOKBACK` expressed in code windows, rounded up."""
+        step = self.checkin_code_step_seconds
+        if step <= 0:  # pragma: no cover - Settings rejects it, a hand-built config might not
+            return self.checkin_code_tolerance_steps
+        whole_steps = -(-int(CHECKIN_CODE_EXPIRED_LOOKBACK.total_seconds()) // step)
+        return max(self.checkin_code_tolerance_steps, whole_steps)
 
     @property
     def default_language(self) -> str:

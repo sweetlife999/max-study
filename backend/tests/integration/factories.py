@@ -143,6 +143,27 @@ class World:
             event.qr_seed, event.id, self.clock.now(), self.config.checkin_code_step_seconds
         ).code
 
+    def code_never_valid_for(self, *events: Event) -> str:
+        """A six-digit code no given event recognises, not even as an expired one.
+
+        Picking "000000" by hand would pass almost always and fail once in a hundred thousand
+        runs; this searches instead, so the test is deterministic.
+        """
+        step = self.config.checkin_code_step_seconds
+        lookback = self.config.checkin_code_expired_lookback_steps
+        current = codes.window_for(self.clock.now(), step)
+        taken = {
+            codes.compute_code(event.qr_seed, event.id, window)
+            for event in events
+            for window in range(max(0, current - lookback), current + 2)
+        }
+        for candidate in range(10**codes.CODE_DIGITS):
+            code = str(candidate).zfill(codes.CODE_DIGITS)
+            if code not in taken:
+                return code
+        msg = "no unused code exists"  # pragma: no cover - impossible with six digits
+        raise AssertionError(msg)  # pragma: no cover
+
 
 def make_world(
     session: AsyncSession,

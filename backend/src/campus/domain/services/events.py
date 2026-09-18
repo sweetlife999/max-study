@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import Select, func, select
 
@@ -32,6 +32,11 @@ UNSET: Any = object()
 EventScope = str
 SCOPE_UPCOMING: EventScope = "upcoming"
 SCOPE_PAST: EventScope = "past"
+
+WindowState = Literal["before", "open", "after"]
+WINDOW_BEFORE: WindowState = "before"
+WINDOW_OPEN: WindowState = "open"
+WINDOW_AFTER: WindowState = "after"
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,9 +234,31 @@ class EventService(Service):
             tolerance_steps=self.config.checkin_code_tolerance_steps,
         )
 
-    def is_within_checkin_window(self, event: Event, *, now: datetime | None = None) -> bool:
+    def classify_code(
+        self, event: Event, code: str, *, now: datetime | None = None
+    ) -> codes.CodeVerdict:
+        """``valid`` / ``expired`` / ``invalid`` — §7 has a separate code for a stale one."""
+        return codes.classify_code(
+            event.qr_seed,
+            event.id,
+            code,
+            now=now or self.now(),
+            step_seconds=self.config.checkin_code_step_seconds,
+            tolerance_steps=self.config.checkin_code_tolerance_steps,
+            expired_lookback_steps=self.config.checkin_code_expired_lookback_steps,
+        )
+
+    def checkin_window_state(self, event: Event, *, now: datetime | None = None) -> WindowState:
+        """Where "now" sits relative to ``[starts_at - 30 min, ends_at + 30 min]`` (§5)."""
         moment = now or self.now()
-        return event.starts_at - CHECKIN_MARGIN <= moment <= event.ends_at + CHECKIN_MARGIN
+        if moment < event.starts_at - CHECKIN_MARGIN:
+            return WINDOW_BEFORE
+        if moment > event.ends_at + CHECKIN_MARGIN:
+            return WINDOW_AFTER
+        return WINDOW_OPEN
+
+    def is_within_checkin_window(self, event: Event, *, now: datetime | None = None) -> bool:
+        return self.checkin_window_state(event, now=now) == WINDOW_OPEN
 
     # --- views -------------------------------------------------------------------------------
 

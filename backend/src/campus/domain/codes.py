@@ -12,6 +12,7 @@ import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 SEED_BYTES = 32
 CODE_DIGITS = 6
@@ -115,3 +116,51 @@ def verify_code(
         # No early exit: every accepted window is compared.
         matched = hmac.compare_digest(expected, candidate) | matched
     return matched
+
+
+CodeVerdict = Literal["valid", "expired", "invalid"]
+
+
+def classify_code(
+    seed: bytes,
+    event_id: int,
+    code: str,
+    *,
+    now: datetime,
+    step_seconds: int,
+    tolerance_steps: int,
+    expired_lookback_steps: int,
+) -> CodeVerdict:
+    """Accept, or say *why* the code was refused (ARCHITECTURE.md §7).
+
+    ``expired`` means the code really was this event's, only for a window further back than the
+    tolerance — the mini-app then says "scan again" instead of "wrong code". The extra windows are
+    searched for the message alone: what is *accepted* is exactly what :func:`verify_code`
+    accepts, and a future window is never expired, it is simply not ours.
+
+    Looking further back costs one HMAC per extra window and leaks nothing an attacker who
+    already holds the code does not know; the rate limit of §5 still bounds the attempts.
+    """
+    if expired_lookback_steps < 0:
+        msg = "expired_lookback_steps must not be negative"
+        raise ValueError(msg)
+    if verify_code(
+        seed,
+        event_id,
+        code,
+        now=now,
+        step_seconds=step_seconds,
+        tolerance_steps=tolerance_steps,
+    ):
+        return "valid"
+    if not is_well_formed(code) or expired_lookback_steps <= tolerance_steps:
+        return "invalid"
+    current = window_for(now, step_seconds)
+    candidate = code.encode("ascii")
+    oldest = max(0, current - expired_lookback_steps)
+    stale_newest = current - tolerance_steps - 1
+    for window in range(oldest, stale_newest + 1):
+        expected = compute_code(seed, event_id, window).encode("ascii")
+        if hmac.compare_digest(expected, candidate):
+            return "expired"
+    return "invalid"

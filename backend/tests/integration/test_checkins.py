@@ -10,7 +10,9 @@ from campus.domain.context import CHECKIN_RATE_LIMIT_ATTEMPTS, CHECKIN_RATE_LIMI
 from campus.domain.errors import (
     AmbiguousCodeError,
     CheckinClosedError,
-    CheckinNotInTimeWindowError,
+    CheckinNotStartedError,
+    CheckinWindowOverError,
+    CodeExpiredError,
     EventNotFoundError,
     InvalidCodeError,
     TooManyAttemptsError,
@@ -142,12 +144,25 @@ async def test_a_closed_event_refuses_the_check_in(world: World) -> None:
         )
 
 
-async def test_an_event_outside_its_window_refuses_the_check_in(world: World) -> None:
+async def test_an_event_whose_window_has_not_opened_says_so(world: World) -> None:
+    """§7 keeps `checkin_not_started` and `checkin_window_over` apart; the mini-app shows both."""
     organizer = await world.organizer()
     student = await world.user()
     event = await world.event(organizer=organizer, starts_in=timedelta(hours=5), checkin_open=True)
 
-    with pytest.raises(CheckinNotInTimeWindowError):
+    with pytest.raises(CheckinNotStartedError):
+        await world.checkins.check_in(
+            user=student, code=world.code_for(event), method="qr", event_id=event.id
+        )
+
+
+async def test_an_event_whose_window_has_closed_says_so(world: World) -> None:
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.open_event_now(organizer=organizer)
+    world.clock.advance(timedelta(hours=4))  # well past ends_at + 30 minutes
+
+    with pytest.raises(CheckinWindowOverError):
         await world.checkins.check_in(
             user=student, code=world.code_for(event), method="qr", event_id=event.id
         )
@@ -157,10 +172,47 @@ async def test_a_wrong_code_is_refused(world: World) -> None:
     organizer = await world.organizer()
     student = await world.user()
     event = await world.open_event_now(organizer=organizer)
-    wrong = "000000" if world.code_for(event) != "000000" else "111111"
 
     with pytest.raises(InvalidCodeError):
-        await world.checkins.check_in(user=student, code=wrong, method="qr", event_id=event.id)
+        await world.checkins.check_in(
+            user=student, code=world.code_never_valid_for(event), method="qr", event_id=event.id
+        )
+
+
+async def test_a_code_from_a_window_just_past_the_tolerance_is_expired_not_wrong(
+    world: World,
+) -> None:
+    """Scanning is slow sometimes; §7 tells the student to scan again rather than "wrong code"."""
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.open_event_now(organizer=organizer)
+    scanned = world.code_for(event)
+    world.clock.advance(timedelta(seconds=60))
+
+    with pytest.raises(CodeExpiredError):
+        await world.checkins.check_in(user=student, code=scanned, method="qr", event_id=event.id)
+
+
+async def test_a_code_older_than_the_lookback_is_simply_wrong(world: World) -> None:
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.open_event_now(organizer=organizer)
+    scanned = world.code_for(event)
+    world.clock.advance(timedelta(minutes=10))
+
+    with pytest.raises(InvalidCodeError):
+        await world.checkins.check_in(user=student, code=scanned, method="qr", event_id=event.id)
+
+
+async def test_a_bare_code_that_has_only_just_gone_stale_is_expired(world: World) -> None:
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.open_event_now(organizer=organizer)
+    scanned = world.code_for(event)
+    world.clock.advance(timedelta(seconds=60))
+
+    with pytest.raises(CodeExpiredError):
+        await world.checkins.check_in(user=student, code=scanned, method="code")
 
 
 async def test_a_missing_event_is_refused(world: World) -> None:
@@ -175,10 +227,12 @@ async def test_a_missing_event_is_refused(world: World) -> None:
 async def test_a_bare_code_matching_nothing_is_refused(world: World) -> None:
     organizer = await world.organizer()
     student = await world.user()
-    await world.open_event_now(organizer=organizer)
+    event = await world.open_event_now(organizer=organizer)
 
     with pytest.raises(InvalidCodeError):
-        await world.checkins.check_in(user=student, code="000000", method="code")
+        await world.checkins.check_in(
+            user=student, code=world.code_never_valid_for(event), method="code"
+        )
 
 
 async def test_a_bare_code_matching_two_events_asks_which_one(world: World) -> None:

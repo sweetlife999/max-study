@@ -7,7 +7,8 @@ Order of checks, deliberately:
 2. code shape;
 3. the event: given explicitly, it must exist, have check-in open and be inside its time window;
    given as a bare code, only events already satisfying all three are searched;
-4. the code itself, in constant time, against the accepted windows;
+4. the code itself, in constant time, against the accepted windows; a code that only just went
+   stale is told apart from a wrong one, because §7 gives the two different codes;
 5. the check-in row, inserted idempotently — a repeat is ``already=True`` and a 200, not an error.
 
 Every request that got past the rate limit costs exactly one row in ``checkin_attempts``,
@@ -19,7 +20,6 @@ The rows are written in the caller's transaction, and the caller must commit it 
 service raises: see :func:`campus.db.session.domain_scope`.
 """
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sqlalchemy import func, select
@@ -31,14 +31,16 @@ from campus.domain.context import CHECKIN_RATE_LIMIT_ATTEMPTS, CHECKIN_RATE_LIMI
 from campus.domain.errors import (
     AmbiguousCodeError,
     CheckinClosedError,
-    CheckinNotInTimeWindowError,
+    CheckinNotStartedError,
+    CheckinWindowOverError,
+    CodeExpiredError,
     DomainError,
     InvalidCodeError,
     TooManyAttemptsError,
     ValidationFailedError,
 )
 from campus.domain.services.base import Service
-from campus.domain.services.events import EventService
+from campus.domain.services.events import WINDOW_AFTER, WINDOW_BEFORE, EventService
 from campus.domain.services.onboarding import OnboardingService
 from campus.domain.services.outbox import OutboxService
 from campus.domain.views import CheckinResult, StepView
@@ -121,27 +123,36 @@ class CheckinService(Service):
     async def _resolve_named_event(self, event_id: int, code: str) -> Event:
         """The mini-app path: the deep link already said which event it is."""
         event = await self._events.require(event_id)
+        now = self.now()
         if not event.checkin_open:
             raise CheckinClosedError(f"event {event.id}")
-        if not self._events.is_within_checkin_window(event, now=self.now()):
-            raise CheckinNotInTimeWindowError(f"event {event.id}")
-        if not self._events.verify_code(event, code, now=self.now()):
+        state = self._events.checkin_window_state(event, now=now)
+        if state == WINDOW_BEFORE:
+            raise CheckinNotStartedError(f"event {event.id}")
+        if state == WINDOW_AFTER:
+            raise CheckinWindowOverError(f"event {event.id}")
+        verdict = self._events.classify_code(event, code, now=now)
+        if verdict == "expired":
+            raise CodeExpiredError(f"stale code for event {event.id}")
+        if verdict != "valid":
             raise InvalidCodeError(f"code rejected for event {event.id}")
         return event
 
     async def _resolve_event_by_code(self, code: str) -> Event:
         """The chat path: a bare six-digit code, matched against every open event (§5)."""
-        candidates = await self._events.list_open_for_checkin()
-        matches = self._matching(candidates, code)
-        if not matches:
-            raise InvalidCodeError("no open event matches this code")
+        now = self.now()
+        verdicts = [
+            (event, self._events.classify_code(event, code, now=now))
+            for event in await self._events.list_open_for_checkin()
+        ]
+        matches = [event for event, verdict in verdicts if verdict == "valid"]
         if len(matches) > 1:
             raise AmbiguousCodeError(tuple(event.id for event in matches))
-        return matches[0]
-
-    def _matching(self, candidates: Sequence[Event], code: str) -> list[Event]:
-        now = self.now()
-        return [event for event in candidates if self._events.verify_code(event, code, now=now)]
+        if matches:
+            return matches[0]
+        if any(verdict == "expired" for _, verdict in verdicts):
+            raise CodeExpiredError("the code belonged to an open event, but its window has passed")
+        raise InvalidCodeError("no open event matches this code")
 
     async def _register(self, *, user: User, event: Event, method: str) -> CheckinOutcome:
         """Insert the check-in idempotently and queue what follows from it."""

@@ -45,6 +45,11 @@ from campus.domain.services.onboarding import OnboardingService
 from campus.domain.services.outbox import OutboxService
 from campus.domain.views import CheckinResult, StepView
 
+# Namespace of the per-user advisory lock that makes the rate-limit gate of §5 atomic. Any
+# constant would do; this one is "CIN" so that pg_locks is readable during an incident.
+RATE_LIMIT_LOCK_NAMESPACE = 0x43494E
+_LOCK_KEY_MODULO = 2**31
+
 
 @dataclass(frozen=True, slots=True)
 class CheckinOutcome:
@@ -81,7 +86,28 @@ class CheckinService(Service):
         )
         return int(result.scalar_one())
 
+    async def _lock_attempts(self, user_id: int) -> None:
+        """Serialise this user's rate-limit gate for the rest of the transaction.
+
+        Counting the recent attempts and then adding one is a check-then-act. Two requests in
+        flight both read the same count, both pass and both write a row, so a guesser who simply
+        opens N connections gets N times the attempts §5 allows — measured: forty parallel
+        guesses spent twenty attempts against a limit of ten. The lock closes that window.
+
+        It is taken per user, so it never blocks anybody else, and Postgres releases it when the
+        transaction ends — including the commit :func:`~campus.db.session.domain_scope` performs
+        when the domain raises. The key is truncated to 32 bits because that is what
+        ``pg_advisory_xact_lock(int, int)`` takes; a collision between two users would only make
+        them wait for each other, never share a budget.
+        """
+        await self.session.execute(
+            select(
+                func.pg_advisory_xact_lock(RATE_LIMIT_LOCK_NAMESPACE, user_id % _LOCK_KEY_MODULO)
+            )
+        )
+
     async def _guard_rate_limit(self, user_id: int) -> None:
+        await self._lock_attempts(user_id)
         if await self.recent_attempts(user_id) >= CHECKIN_RATE_LIMIT_ATTEMPTS:
             raise TooManyAttemptsError(f"user {user_id}")
 

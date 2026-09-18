@@ -8,10 +8,12 @@ inside a message string.
 import json
 import logging
 import sys
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
+from campus.domain.views import QrCodeView
 from campus.logs import MASK, JsonFormatter, configure_logging, mask_text, mask_value
 
 
@@ -89,6 +91,39 @@ def test_a_value_json_cannot_serialise_still_renders(formatter: JsonFormatter) -
     payload = render(formatter, make_record("odd", thing=object()))
 
     assert isinstance(payload["thing"], str)
+
+
+def test_the_repr_of_an_unserialisable_value_is_masked_too() -> None:
+    """A dataclass view is not JSON; it used to reach the log as a raw, unmasked repr."""
+    view = QrCodeView(
+        code="123456",
+        deeplink="https://max.ru/bot?startapp=ci_7_123456",
+        window_started_at=datetime(2026, 9, 18, tzinfo=UTC),
+        expires_at=datetime(2026, 9, 18, tzinfo=UTC),
+        step_seconds=10,
+    )
+    rendered = JsonFormatter().format(make_record("rendered", qr=view))
+
+    assert "123456" not in rendered
+    assert MASK in rendered
+
+
+def test_a_set_of_codes_cannot_slip_through_as_a_repr() -> None:
+    """``set`` is not a Sequence, so it reaches json.dumps rather than the recursive mask."""
+    rendered = JsonFormatter().format(make_record("odd", payload={"code": {"000111"}}))
+
+    assert "000111" not in rendered
+
+
+def test_a_sensitive_assignment_inside_free_text_is_masked() -> None:
+    assert "123456" not in mask_text("QrCodeView(code='123456', step_seconds=10)")
+    assert "step_seconds=10" in mask_text("QrCodeView(code='123456', step_seconds=10)")
+    assert "abcd" not in mask_text("Event(qr_seed=b'abcd')")
+    assert "s3cret" not in mask_text("token: s3cret")
+
+
+def test_an_insensitive_assignment_survives() -> None:
+    assert mask_text("event_id=42 attendees=12") == "event_id=42 attendees=12"
 
 
 # --- masking by field name ---------------------------------------------------------------------

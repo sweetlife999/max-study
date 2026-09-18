@@ -84,6 +84,13 @@ _CHECKIN_PAYLOAD: Final = re.compile(r"(ci_\d{1,18}_)\d{6}")
 _LAUNCH_DATA: Final = re.compile(r"(WebAppData|X-Max-Init-Data)\s*[=:]\s*\S+", re.IGNORECASE)
 _HASH_PARAM: Final = re.compile(r"\b(hash)\s*[=:]\s*[A-Za-z0-9%]+", re.IGNORECASE)
 _AUTHORIZATION: Final = re.compile(r"(Authorization)\s*[=:]\s*\S+", re.IGNORECASE)
+# `name=value` / `name: value` inside free text — the shape a repr takes. Anything json cannot
+# serialise is logged as its repr (a frozen view, an ORM object), and a repr is free text: without
+# this, `QrCodeView(code='123456', ...)` put a live check-in code in the log, and `qr_seed=b'...'`
+# a seed. The value is a quoted string, a bytes literal or a run of non-delimiter characters.
+_ASSIGNMENT: Final = re.compile(
+    r"([A-Za-z][A-Za-z0-9_.\- ]*?)(\s*[=:]\s*)(b?'[^']*'|b?\"[^\"]*\"|[^\s,;)\]}]+)"
+)
 
 _MAX_DEPTH: Final = 6
 
@@ -96,12 +103,18 @@ def is_sensitive(name: str) -> bool:
     return _normalized(name) in SENSITIVE_FIELDS
 
 
+def _mask_assignment(match: re.Match[str]) -> str:
+    name, separator, _ = match.groups()
+    return f"{name}{separator}{MASK}" if is_sensitive(name.strip()) else match.group(0)
+
+
 def mask_text(text: str) -> str:
     """Redact the shapes a secret takes inside a message string."""
     masked = _CHECKIN_PAYLOAD.sub(rf"\1{MASK}", text)
     masked = _LAUNCH_DATA.sub(rf"\1={MASK}", masked)
     masked = _AUTHORIZATION.sub(rf"\1: {MASK}", masked)
-    return _HASH_PARAM.sub(rf"\1={MASK}", masked)
+    masked = _HASH_PARAM.sub(rf"\1={MASK}", masked)
+    return _ASSIGNMENT.sub(_mask_assignment, masked)
 
 
 def mask_value(name: str, value: object, *, depth: int = 0) -> Any:
@@ -147,8 +160,8 @@ class JsonFormatter(logging.Formatter):
 
 
 def _fallback(value: object) -> str:
-    """Anything json cannot serialise is logged as its repr, never dropped silently."""
-    return repr(value)
+    """Anything json cannot serialise is logged as its repr — masked, never dropped silently."""
+    return mask_text(repr(value))
 
 
 def configure_logging(level: str = "INFO", *, stream: Any = None) -> None:

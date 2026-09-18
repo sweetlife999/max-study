@@ -249,3 +249,29 @@ def test_chat_is_optional() -> None:
 
     assert result.chat_id is None
     assert result.chat_type is None
+
+
+# --- the hash field itself ----------------------------------------------------------------------
+
+
+def unsigned(fields: dict[str, str]) -> str:
+    return "&".join(f"{key}={quote(value, safe='')}" for key, value in sorted(fields.items()))
+
+
+def test_a_hash_with_non_ascii_characters_is_rejected_not_crashed() -> None:
+    """``hmac.compare_digest`` raises TypeError on non-ASCII str; §7 wants a 401, not a 500."""
+    with pytest.raises(InvalidInitDataError):
+        verify(f"{unsigned(valid_fields())}&hash=привет")
+
+
+@pytest.mark.parametrize("bad", ["deadbeef", "z" * 64, "0" * 63, "0" * 65, "-" * 64])
+def test_a_hash_that_is_not_64_hex_characters_is_rejected(bad: str) -> None:
+    with pytest.raises(InvalidInitDataError):
+        verify(f"{unsigned(valid_fields())}&hash={bad}")
+
+
+def test_an_uppercase_hex_hash_still_verifies() -> None:
+    """Hex is case-insensitive; rejecting an upper-case signature would be a false negative."""
+    head, _, digest = sign(valid_fields()).rpartition("=")
+
+    assert verify(f"{head}={digest.upper()}").max_user_id == USER["id"]

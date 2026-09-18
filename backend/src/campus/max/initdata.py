@@ -26,6 +26,7 @@ Two deliberate readings of the specification:
 import hashlib
 import hmac
 import json
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
@@ -42,6 +43,13 @@ START_PARAM_FIELD: Final = "start_param"
 QUERY_ID_FIELD: Final = "query_id"
 # The fragment parameter that carries the signed payload.
 FRAGMENT_PARAM: Final = "WebAppData"
+
+# A SHA-256 signature is 64 hex characters. Anything else can never equal ours, and checking the
+# shape first keeps ``hmac.compare_digest`` away from input it refuses to compare: fed two str it
+# raises TypeError on a non-ASCII character, which on this unauthenticated path would turn a
+# forged header into a 500 instead of the 401 of §7.
+HASH_HEX_LENGTH: Final = hashlib.sha256().digest_size * 2
+_HASH_RE: Final = re.compile(rf"[0-9a-fA-F]{{{HASH_HEX_LENGTH}}}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,9 +131,14 @@ def verify_init_data(
     provided_hash = values.get(HASH_FIELD)
     if not provided_hash:
         raise InvalidInitDataError("hash is missing")
+    if not _HASH_RE.fullmatch(provided_hash):
+        # Rejecting on shape leaks nothing: no signature of ours could have had this one.
+        raise InvalidInitDataError("hash is not a sha256 hex digest")
 
     expected = signature(bot_token, launch_params(pairs))
-    if not hmac.compare_digest(expected, provided_hash):
+    # Bytes, so the comparison cannot raise; hex is case-insensitive, so an upper-case digest is
+    # the same signature and not a false negative.
+    if not hmac.compare_digest(expected.encode("ascii"), provided_hash.lower().encode("ascii")):
         raise InvalidInitDataError("signature mismatch")
 
     auth_date = _auth_date(values.get(AUTH_DATE_FIELD))

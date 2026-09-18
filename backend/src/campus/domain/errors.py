@@ -151,6 +151,17 @@ class InvalidCodeError(DomainError):
     http_status = 400
 
 
+class AmbiguousCodeError(DomainError):
+    """A bare code matched several open events (§5); the caller must pick one."""
+
+    code = "ambiguous_code"
+    http_status = 409
+
+    def __init__(self, event_ids: tuple[int, ...]) -> None:
+        super().__init__(f"code matches events {list(event_ids)}")
+        self.event_ids = event_ids
+
+
 # --- 429 --------------------------------------------------------------------------------------
 
 

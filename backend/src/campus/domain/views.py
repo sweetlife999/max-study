@@ -89,6 +89,33 @@ class InviteView:
 
 
 @dataclass(frozen=True, slots=True)
+class ConfigEventKindView:
+    key: str
+    title: str
+    default_points: int
+
+
+@dataclass(frozen=True, slots=True)
+class ConfigStepView:
+    """An onboarding step as the organizer forms see it: no ``description``, no ``done``."""
+
+    key: str
+    type: str
+    title: str
+    event_kind: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AppConfigView:
+    """GET /api/config (§7): the university's vocabulary, from the YAML of §6."""
+
+    event_kinds: tuple[ConfigEventKindView, ...]
+    onboarding_steps: tuple[ConfigStepView, ...]
+    languages: tuple[str, ...]
+    university: UniversityView
+
+
+@dataclass(frozen=True, slots=True)
 class AttendanceEntry:
     user_id: int
     first_name: str

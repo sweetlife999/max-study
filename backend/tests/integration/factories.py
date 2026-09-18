@@ -13,6 +13,7 @@ from campus.domain import codes
 from campus.domain.clock import FixedClock
 from campus.domain.context import DomainConfig
 from campus.domain.services import (
+    AppConfigService,
     AttendanceService,
     CheckinService,
     EventService,
@@ -82,6 +83,11 @@ class World:
     @property
     def attendance(self) -> AttendanceService:
         return AttendanceService(self.session, self.config, self.clock)
+
+    @property
+    def app_config(self) -> AppConfigService:
+        """GET /api/config needs no session, so this one is built from the config alone."""
+        return AppConfigService(self.config)
 
     # --- builders ----------------------------------------------------------------------------
 

@@ -7,8 +7,10 @@ it from the code under test. A new code may only appear here together with an ed
 
 from campus.domain.errors import (
     API_ERROR_STATUSES,
+    AdminRequiredError,
     AmbiguousCodeError,
     DomainError,
+    OrganizerRequiredError,
     all_error_classes,
 )
 
@@ -17,6 +19,7 @@ CONTRACT: dict[str, int] = {
     "invalid_init_data": 401,
     "consent_required": 403,
     "not_organizer": 403,
+    "not_admin": 403,
     "not_owner": 403,
     "checkin_closed": 403,
     "checkin_not_started": 403,
@@ -77,3 +80,12 @@ def test_an_ambiguous_code_carries_the_events_the_caller_must_choose_from() -> N
     assert error.event_ids == (7, 9)
     assert error.code == "ambiguous_code"
     assert error.http_status == 409
+
+
+def test_an_admin_only_endpoint_has_its_own_code() -> None:
+    """§7 lists `not_admin` separately: the mini-app tells the two 403s apart."""
+    assert AdminRequiredError.code == "not_admin"
+    assert AdminRequiredError.http_status == 403
+    # The message stays admin-specific even though the class inherits from the organizer error.
+    assert AdminRequiredError.message_key == "admin_required"
+    assert not issubclass(OrganizerRequiredError, AdminRequiredError)

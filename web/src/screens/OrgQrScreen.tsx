@@ -1,8 +1,15 @@
 import { Button, Flex, Typography } from '@maxhub/max-ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
-import { useAttendanceQuery, useEventQuery, useSendQrToChatMutation } from '../api/queries';
+import { isApiError } from '../api/errors';
+import {
+  queryKeys,
+  useAttendanceQuery,
+  useEventQuery,
+  useSendQrToChatMutation,
+} from '../api/queries';
 import { useRotatingQr } from '../api/useRotatingQr';
 import type { Event } from '../api/types';
 import { useBridge, useNativeBackButton } from '../bridge/context';
@@ -51,6 +58,16 @@ function QrScreenBody({ event }: { event: Event }) {
   const attendance = useAttendanceQuery(event.id, { poll: event.checkin_open });
   const sendToChat = useSendQrToChatMutation(event.id);
   const now = useNow(COUNTDOWN_TICK_MS, event.checkin_open);
+  const queryClient = useQueryClient();
+
+  // §7: the QR endpoint answers 403 as soon as `checkin_open` is false. Our cached event then
+  // says otherwise, so reload it — the screen must explain that check-in is closed instead of
+  // leaving a stale code and a generic warning on display.
+  const forbidden = isApiError(rotating.error) && rotating.error.status === 403;
+  useEffect(() => {
+    if (!forbidden) return;
+    void queryClient.invalidateQueries({ queryKey: queryKeys.event(event.id) });
+  }, [forbidden, queryClient, event.id]);
 
   useEffect(() => {
     if (!event.checkin_open) return undefined;

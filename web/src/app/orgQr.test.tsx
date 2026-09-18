@@ -149,6 +149,56 @@ describe('the full-screen QR', () => {
     expect(screen.getByRole('button', { name: 'Повторить' })).toBeInTheDocument();
   });
 
+  it('stops re-requesting the code once the server forbids it and explains why', async () => {
+    // §7: `GET /api/org/events/{id}/qr` answers 403 as soon as `checkin_open` is false. The old
+    // loop retried that deterministic answer every 3 s forever and left a stale code on screen.
+    let calls = 0;
+    server.use(
+      http.get(`*/api/org/events/${OPEN_EVENT_ID}/qr`, () => {
+        calls += 1;
+        const event = mockDb().events.find((candidate) => candidate.id === OPEN_EVENT_ID);
+        if (event) event.checkinOpen = false;
+        return HttpResponse.json(
+          { error: { code: 'checkin_closed', message: 'Отметка закрыта.' } },
+          { status: 403 },
+        );
+      }),
+    );
+
+    renderApp({ route: `/org/events/${OPEN_EVENT_ID}/qr`, fakeTimers: true });
+
+    expect(await screen.findByText('Отметка закрыта')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Открыть отметку' })).toBeInTheDocument();
+
+    await advance(30_000);
+    await flush();
+    expect(calls).toBe(1);
+  });
+
+  it('stops re-requesting a code the server keeps refusing and offers an explicit retry', async () => {
+    // A deterministic 4xx (deleted event, expired initData, lost ownership) answers the same way
+    // forever: the old loop re-requested it every 3 s for as long as the screen stayed open.
+    let calls = 0;
+    server.use(
+      http.get(`*/api/org/events/${OPEN_EVENT_ID}/qr`, () => {
+        calls += 1;
+        return HttpResponse.json(
+          { error: { code: 'not_found', message: 'Не найдено.' } },
+          { status: 404 },
+        );
+      }),
+    );
+
+    renderApp({ route: `/org/events/${OPEN_EVENT_ID}/qr`, fakeTimers: true });
+
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeInTheDocument();
+    expect(calls).toBe(1);
+
+    await advance(30_000);
+    await flush();
+    expect(calls).toBe(1);
+  });
+
   it('refuses to show a QR while check-in is closed and offers a way back', async () => {
     renderApp({ route: `/org/events/${CLOSED_EVENT_ID}/qr`, fakeTimers: true });
 

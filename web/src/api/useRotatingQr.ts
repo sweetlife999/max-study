@@ -7,6 +7,7 @@ import {
   type QrTimingInput,
 } from '../lib/qrTiming';
 import { useApi } from './context';
+import { isApiError } from './errors';
 import type { EventQr } from './types';
 
 export interface RotatingQr {
@@ -34,7 +35,10 @@ const INITIAL: Snapshot = { qr: null, timing: null, error: null };
  * arrived, so a device clock that is off does not shorten or stretch the window (see qrTiming).
  *
  * A failed refresh keeps the previous code on screen and is reported through `error` — the
- * countdown reaching zero tells the organizer the code may be stale — and is retried on its own.
+ * countdown reaching zero tells the organizer the code may be stale. Transient failures are
+ * retried on their own; a deterministic 4xx (§7 answers `403` as soon as `checkin_open` is
+ * false, `401` once `initData` expires, `404` for a deleted event) would answer the same way
+ * forever, so the loop stops and only the explicit `refresh` restarts it.
  */
 export function useRotatingQr(eventId: number, enabled: boolean): RotatingQr {
   const api = useApi();
@@ -79,7 +83,9 @@ export function useRotatingQr(eventId: number, enabled: boolean): RotatingQr {
       } catch (error) {
         if (cancelled) return;
         setSnapshot((current) => ({ ...current, error }));
-        schedule(QR_ERROR_RETRY_MS);
+        // Retrying a deterministic 4xx every few seconds only hammers the API and never
+        // recovers; the screen keeps the last code, warns, and offers `refresh`.
+        if (!(isApiError(error) && error.isClientError)) schedule(QR_ERROR_RETRY_MS);
       }
     };
 

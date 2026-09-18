@@ -104,7 +104,7 @@ reminders_before: [PT24H, PT1H]
 База `/api`. JSON. Аутентификация — заголовок `X-Max-Init-Data: <initData>` на каждом запросе; проверка подписи и срока (`auth_date` не старше `INIT_DATA_TTL_SECONDS`, default 86400) — **строго по dev.max.ru**. Пользователь создаётся при первом валидном запросе.
 Ошибки: `{"error": {"code": "<snake_case>", "message": "<текст на языке пользователя>"}}` с HTTP-статусом (400/401/403/404/409/422/429).
 
-**Коды ошибок (закрытый список, фронт на них завязан):** `invalid_init_data` (401), `consent_required` (403), `not_organizer` (403), `not_owner` (403), `checkin_closed` (403), `checkin_not_started` (403), `checkin_window_over` (403), `invalid_code` (400), `code_expired` (400), `ambiguous_code` (409), `event_not_found` (404), `step_not_found` (404), `step_not_manual` (409), `invite_invalid` (404), `invite_used` (409), `invite_expired` (409), `rate_limited` (429), `validation_error` (422). Новый код добавляется только вместе с правкой этого списка.
+**Коды ошибок (закрытый список, фронт на них завязан):** `invalid_init_data` (401), `consent_required` (403), `not_organizer` (403), `not_admin` (403), `not_owner` (403), `checkin_closed` (403), `checkin_not_started` (403), `checkin_window_over` (403), `invalid_code` (400), `code_expired` (400), `ambiguous_code` (409), `event_not_found` (404), `step_not_found` (404), `step_not_manual` (409), `invite_invalid` (404), `invite_used` (409), `invite_expired` (409), `rate_limited` (429), `validation_error` (422). Новый код добавляется только вместе с правкой этого списка.
 
 Каждый ответ содержит стандартный HTTP-заголовок `Date` (серверное время, UTC): по нему фронт корректирует расхождение часов клиента при ротации QR. `429` сопровождается `Retry-After` в секундах.
 Пока нет `consent_at`, все эндпоинты, кроме `GET /me`, `POST /me/consent`, `PATCH /me`, отвечают `403 consent_required`.
@@ -136,6 +136,7 @@ OpenAPI генерируется FastAPI и публикуется в `docs/open
 **Приватность кодов отметки:** код не должен попадать в адресную строку мини-приложения и в логи. `start_param` вида `ci_<event>_<code>` читается один раз при старте, отправляется в `POST /api/checkins` и не переносится в путь роутера; в логах `api`, `bot` и Caddy коды, `initData` и `qr_seed` маскируются.
 
 ## 8. Бот
+- **Осознанное отклонение от рекомендации MAX:** документация называет long polling непригодным для production и предлагает webhook. Мы всё равно используем polling, потому что жюри запускает проект одной командой Docker без публичного HTTPS, а сценарий бота должен работать у них. Webhook-режим рассматривается на этапе деплоя как дополнительный, не заменяющий polling.
 - **Polling**: `GET /updates` с `marker` из `kv`, таймаут long-poll, маркер сохраняется **после** успешной обработки пачки. Ошибка хендлера одного апдейта логируется и не роняет цикл.
 - `bot_started` / `/start` с payload:
   - пусто → приветствие, согласие (отдельное сообщение с кнопкой, §152-ФЗ ст. 9), выбор языка, главное меню;
@@ -160,7 +161,7 @@ Vite + React + TS + `@maxhub/max-ui`; MAX Bridge подключается стр
 Все состояния: загрузка / пусто / ошибка с повтором. RU/EN. Работает в мобильной и веб-версии MAX.
 
 ## 10. Конфигурация (env)
-`MAX_BOT_TOKEN`, `MAX_BOT_USERNAME`, `MAX_API_BASE_URL` (default `https://platform-api2.max.ru`), `DATABASE_URL`, `UNIVERSITY_CONFIG_PATH`, `ADMIN_MAX_USER_IDS` (через запятую), `PUBLIC_WEB_URL`, `CHECKIN_CODE_STEP_SECONDS`, `CHECKIN_CODE_TOLERANCE_STEPS`, `INIT_DATA_TTL_SECONDS`, `LOG_LEVEL`. Всё — в `.env.example` с комментариями. Секретов в репозитории нет.
+`MAX_BOT_TOKEN`, `MAX_BOT_USERNAME`, `MAX_API_BASE_URL` (default `https://platform-api2.max.ru`), `DATABASE_URL`, `UNIVERSITY_CONFIG_PATH`, `ADMIN_MAX_USER_IDS` (через запятую), `PUBLIC_WEB_URL`, `CHECKIN_CODE_STEP_SECONDS`, `CHECKIN_CODE_TOLERANCE_STEPS`, `INIT_DATA_TTL_SECONDS` (default 3600 — рекомендация MAX ≈1 час), `LOG_LEVEL`. Всё — в `.env.example` с комментариями. Секретов в репозитории нет.
 
 ## 11. Качество (обязательно для каждой ветки)
 - `uv run ruff check`, `uv run ruff format --check`, `uv run pyright` (strict для `campus.domain`), `uv run pytest` — зелёные; покрытие `campus.domain` ≥ 90%, всего backend ≥ 80%.

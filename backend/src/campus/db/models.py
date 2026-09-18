@@ -142,6 +142,9 @@ class Event(Base):
     __table_args__ = (
         CheckConstraint("ends_at > starts_at", name="time_range"),
         CheckConstraint("points >= 0", name="points_non_negative"),
+        # §4: "qr_seed (bytea 32)". A shorter seed would weaken every code of §5 without a
+        # single test failing, so the database refuses it too.
+        CheckConstraint(f"octet_length(qr_seed) = {QR_SEED_BYTES}", name="qr_seed_length"),
         Index("ix_events_starts_at", "starts_at"),
         Index("ix_events_organizer_id_starts_at", "organizer_id", "starts_at"),
     )

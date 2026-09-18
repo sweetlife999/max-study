@@ -190,6 +190,14 @@ async def test_qr_seed_round_trips_as_bytes(session: AsyncSession) -> None:
     assert event.qr_seed == seed
 
 
+async def test_a_qr_seed_of_the_wrong_length_is_rejected(session: AsyncSession) -> None:
+    """§4 says `qr_seed (bytea 32)`; a short seed would silently weaken every code of §5."""
+    organizer = await _user(session, 1014)
+
+    with pytest.raises((IntegrityError, DBAPIError)):
+        await _event(session, organizer, qr_seed=b"\x00" * 16)
+
+
 async def test_checkin_method_vocabulary_is_enforced(session: AsyncSession) -> None:
     organizer = await _user(session, 1013)
     event = await _event(session, organizer)

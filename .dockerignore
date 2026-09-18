@@ -1,0 +1,39 @@
+# Everything the image never needs. The build context is the repository root.
+
+.git
+.github
+.claude
+internal
+docs
+
+# Python
+**/__pycache__
+**/*.py[cod]
+**/.venv
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.coverage
+**/coverage.xml
+**/htmlcov
+
+# Tests and tooling are not part of a runtime image
+backend/tests
+
+# Web (built separately by its own Dockerfile)
+web/node_modules
+web/dist
+**/node_modules
+**/dist
+
+# Local configuration and secrets never enter an image
+.env
+.env.*
+!.env.example
+
+# Compose and deployment descriptors
+compose.yaml
+deploy
+
+*.md
+!backend/README.md

@@ -1,0 +1,126 @@
+# Backend gate (ARCHITECTURE.md §11). web.yml belongs to the mini-app branch; the two never
+# touch the same paths.
+name: backend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.9.9"
+
+jobs:
+  quality:
+    name: lint, types and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: campus
+          POSTGRES_PASSWORD: campus
+          POSTGRES_DB: campus
+        ports:
+          - 5432:5432
+        # The job must not start querying before initdb has finished.
+        options: >-
+          --health-cmd "pg_isready -U campus -d campus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        # --locked: CI fails on a stale uv.lock rather than silently resolving something else.
+        run: uv sync --locked
+
+      - name: ruff check
+        run: uv run ruff check
+
+      - name: ruff format --check
+        run: uv run ruff format --check
+
+      - name: pyright
+        run: uv run pyright
+
+      - name: alembic check
+        # The migrations must already describe the models: no pending autogenerate diff.
+        env:
+          DATABASE_URL: postgresql+asyncpg://campus:campus@localhost:5432/campus
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
+
+      - name: pytest
+        # TEST_DATABASE_URL points the integration tests at the service container above, so
+        # testcontainers is never started inside the runner.
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://campus:campus@localhost:5432/campus
+        run: >-
+          uv run pytest
+          --cov=campus
+          --cov-report=term-missing
+          --cov-fail-under=80
+
+      - name: domain coverage
+        # §11 holds campus.domain to a higher bar than the backend as a whole.
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://campus:campus@localhost:5432/campus
+        run: >-
+          uv run pytest
+          --cov=campus.domain
+          --cov-report=term-missing
+          --cov-fail-under=90
+
+  image:
+    name: docker image and one-shot jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build the backend image and bring the database up
+        # §11: `docker compose up --build` from a clean clone must bring the stack up.
+        # The one-shot services are run with `run --rm` rather than as part of `up`: `up
+        # --exit-code-from` implies --abort-on-container-exit, so `migrate` finishing would tear
+        # the network down while `seed` is still connecting. `run` also surfaces the exit code.
+        run: |
+          cp .env.example .env
+          docker compose up --build --wait postgres
+
+      - name: Migrate
+        run: docker compose run --rm migrate
+
+      - name: Seed
+        run: docker compose run --rm seed
+
+      - name: Seeding twice must change nothing
+        run: docker compose run --rm seed
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

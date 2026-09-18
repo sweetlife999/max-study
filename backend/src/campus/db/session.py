@@ -61,3 +61,38 @@ async def session_scope(
         await session.commit()
     finally:
         await session.close()
+
+
+@asynccontextmanager
+async def domain_scope(
+    factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncSession]:
+    """One unit of work for a request answered by the domain.
+
+    A :class:`~campus.domain.errors.DomainError` is a *normal* outcome — the api turns it into a
+    4xx answer — and the domain deliberately records state before raising one: the check-in
+    attempt ledger that ARCHITECTURE.md §5 rate-limits against. Rolling that back would erase
+    every failed guess and leave the limit unable to fire, so such a transaction is committed
+    and the error re-raised. Services keep this safe by validating before they mutate, so a
+    committed error path holds only what the domain meant to keep.
+
+    Any other exception is a fault: everything rolls back.
+
+    This is the scope both entrypoints should wrap a request in; ``session_scope`` stays right
+    for background work that has no user waiting for an answer.
+    """
+    from campus.domain.errors import DomainError  # noqa: PLC0415 - avoids a db -> domain cycle
+
+    session = factory()
+    try:
+        yield session
+    except DomainError:
+        await session.commit()
+        raise
+    except BaseException:
+        await session.rollback()
+        raise
+    else:
+        await session.commit()
+    finally:
+        await session.close()

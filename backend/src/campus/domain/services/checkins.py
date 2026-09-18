@@ -10,8 +10,13 @@ Order of checks, deliberately:
 4. the code itself, in constant time, against the accepted windows;
 5. the check-in row, inserted idempotently — a repeat is ``already=True`` and a 200, not an error.
 
-Every attempt that got as far as step 2 is recorded in ``checkin_attempts``, successful or not.
-A request rejected by the rate limit is *not* recorded, so the window can drain.
+Every request that got past the rate limit costs exactly one row in ``checkin_attempts``,
+whatever the outcome — a guessed code, a closed event and an event id that does not exist all
+count, or the endpoint would answer "does this event exist?" an unlimited number of times.
+A request rejected *by* the rate limit is not recorded, so the window can drain.
+
+The rows are written in the caller's transaction, and the caller must commit it even when this
+service raises: see :func:`campus.db.session.domain_scope`.
 """
 
 from collections.abc import Sequence
@@ -27,6 +32,7 @@ from campus.domain.errors import (
     AmbiguousCodeError,
     CheckinClosedError,
     CheckinNotInTimeWindowError,
+    DomainError,
     InvalidCodeError,
     TooManyAttemptsError,
     ValidationFailedError,
@@ -91,45 +97,45 @@ class CheckinService(Service):
         method: str,
         event_id: int | None = None,
     ) -> CheckinOutcome:
+        # A method the client made up is a malformed request, not a guess: it costs no attempt.
         if method not in CHECKIN_METHODS:
             raise ValidationFailedError("method", f"unknown check-in method {method!r}")
         await self._guard_rate_limit(user.id)
 
-        if not codes.is_well_formed(code):
+        try:
+            event = await self._resolve(code, event_id=event_id)
+        except DomainError:
             await self._record_attempt(user.id, success=False)
-            raise InvalidCodeError("code is not six digits")
-
-        event = (
-            await self._resolve_named_event(user.id, event_id, code)
-            if event_id is not None
-            else await self._resolve_event_by_code(user.id, code)
-        )
+            raise
         await self._record_attempt(user.id, success=True)
         return await self._register(user=user, event=event, method=method)
 
-    async def _resolve_named_event(self, user_id: int, event_id: int, code: str) -> Event:
+    async def _resolve(self, code: str, *, event_id: int | None) -> Event:
+        """Find the event this code checks into, or raise. Records nothing itself."""
+        if not codes.is_well_formed(code):
+            raise InvalidCodeError("code is not six digits")
+        if event_id is not None:
+            return await self._resolve_named_event(event_id, code)
+        return await self._resolve_event_by_code(code)
+
+    async def _resolve_named_event(self, event_id: int, code: str) -> Event:
         """The mini-app path: the deep link already said which event it is."""
         event = await self._events.require(event_id)
         if not event.checkin_open:
-            await self._record_attempt(user_id, success=False)
             raise CheckinClosedError(f"event {event.id}")
         if not self._events.is_within_checkin_window(event, now=self.now()):
-            await self._record_attempt(user_id, success=False)
             raise CheckinNotInTimeWindowError(f"event {event.id}")
         if not self._events.verify_code(event, code, now=self.now()):
-            await self._record_attempt(user_id, success=False)
             raise InvalidCodeError(f"code rejected for event {event.id}")
         return event
 
-    async def _resolve_event_by_code(self, user_id: int, code: str) -> Event:
+    async def _resolve_event_by_code(self, code: str) -> Event:
         """The chat path: a bare six-digit code, matched against every open event (§5)."""
         candidates = await self._events.list_open_for_checkin()
         matches = self._matching(candidates, code)
         if not matches:
-            await self._record_attempt(user_id, success=False)
             raise InvalidCodeError("no open event matches this code")
         if len(matches) > 1:
-            await self._record_attempt(user_id, success=False)
             raise AmbiguousCodeError(tuple(event.id for event in matches))
         return matches[0]
 

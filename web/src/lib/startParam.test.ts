@@ -25,10 +25,15 @@ describe('startParamRoute', () => {
     expect(startParamRoute(startParam)).toBe(INVALID_CHECKIN_ROUTE);
   });
 
-  it.each([[null], [undefined], [''], ['org_token'], ['ev_12'], ['promo_summer2025'], ['CI_1_123456']])(
-    'keeps the main screen for %s',
-    (startParam) => {
-      expect(startParamRoute(startParam)).toBeNull();
-    },
-  );
+  it.each([
+    [null],
+    [undefined],
+    [''],
+    ['org_token'],
+    ['ev_12'],
+    ['promo_summer2025'],
+    ['CI_1_123456'],
+  ])('keeps the main screen for %s', (startParam) => {
+    expect(startParamRoute(startParam)).toBeNull();
+  });
 });

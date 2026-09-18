@@ -27,7 +27,7 @@ function qrEndpoint(options: { skewMs?: number; failAfter?: number } = {}) {
       }
       const serverNow = Date.now() - skewMs;
       const windowStart = Math.floor(serverNow / STEP_MS) * STEP_MS;
-      const code = String(windowStart / STEP_MS % 1_000_000).padStart(6, '0');
+      const code = String((windowStart / STEP_MS) % 1_000_000).padStart(6, '0');
       const body: EventQr = {
         code,
         deeplink: `https://max.ru/campus_demo_bot?startapp=ci_${OPEN_EVENT_ID}_${code}`,

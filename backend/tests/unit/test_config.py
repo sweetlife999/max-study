@@ -139,7 +139,8 @@ def test_settings_defaults_and_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.max_api_base_url == "https://platform-api2.max.ru"
     assert settings.checkin_code_step_seconds == 10
     assert settings.checkin_code_tolerance_steps == 2
-    assert settings.init_data_ttl_seconds == 86400
+    # §10: the MAX recommendation is about an hour, not a day.
+    assert settings.init_data_ttl_seconds == 3600
     assert settings.log_level == "INFO"
     assert settings.require_bot_token() == "secret-token"
     assert "secret-token" not in repr(settings)

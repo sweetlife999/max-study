@@ -115,6 +115,10 @@ jobs:
         # the network down while `seed` is still connecting. `run` also surfaces the exit code.
         run: |
           cp .env.example .env
+          # Not a secret and never sent anywhere: the api refuses to start without a token
+          # because it verifies initData against it, and this job only proves the container
+          # comes up. No request in this job reaches MAX.
+          echo "MAX_BOT_TOKEN=ci-placeholder-not-a-real-token" >> .env
           docker compose up --build --wait postgres
 
       - name: Migrate

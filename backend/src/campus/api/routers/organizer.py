@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Response
 
 from campus.api.auth import Admin, Organizer, OwnedEvent
-from campus.api.schemas import CreateEvent, EventList, UpdateEvent
+from campus.api.schemas import MAX_PAGE, CreateEvent, EventList, UpdateEvent
 from campus.domain.services import AttendanceService, QrDisplayService
 from campus.domain.views import AttendanceView, EventView, InviteView, QrCodeView
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/org", tags=["organizer"])
 
 @router.get("/events")
 async def events(person: Organizer) -> EventList:
-    items = await person.events.list_for_organizer(person.user.id)
+    items = await person.events.list_for_organizer(person.user.id, limit=MAX_PAGE)
     return EventList(items=list(await person.events.views(items, viewer=person.user)))
 
 

@@ -1,6 +1,6 @@
 """Validated request bodies and HTTP envelopes. Domain views are response schemas."""
 
-from typing import Annotated, Literal, Self
+from typing import Annotated, Final, Literal, Self
 
 from fastapi import Path
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, model_validator
@@ -9,6 +9,13 @@ from campus.domain.errors import API_ERROR_CODES
 from campus.domain.views import EventView
 
 EventId = Annotated[int, Path(gt=0, le=2**63 - 1)]
+# Step keys are validated by config.py's _KEY_RE; the path segment is held to the same shape so
+# an arbitrarily long one never reaches the domain or the database.
+StepKey = Annotated[str, Path(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")]
+
+# §7 describes no pagination, so the listings stay whole responses — but not unbounded ones.
+# A single organizer must not be able to make every student's feed unbounded work.
+MAX_PAGE: Final = 200
 
 PositiveId = Annotated[int, Field(gt=0, le=2**63 - 1, strict=True)]
 Title = Annotated[str, Field(min_length=1, max_length=200)]

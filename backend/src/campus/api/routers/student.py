@@ -5,7 +5,7 @@ from typing import Literal
 from fastapi import APIRouter
 
 from campus.api.auth import Authenticated, Consenting
-from campus.api.schemas import CheckinRequest, EventId, EventList, UpdateMe
+from campus.api.schemas import MAX_PAGE, CheckinRequest, EventId, EventList, StepKey, UpdateMe
 from campus.domain.services import AppConfigService, CheckinService, OnboardingService, RsvpService
 from campus.domain.views import (
     AppConfigView,
@@ -49,7 +49,7 @@ async def onboarding(person: Consenting) -> OnboardingView:
 
 
 @router.post("/onboarding/{key}/complete")
-async def complete_step(key: str, person: Consenting) -> StepView:
+async def complete_step(key: StepKey, person: Consenting) -> StepView:
     return await OnboardingService(person.session, person.config, person.clock).complete_manual(
         person.user, key
     )
@@ -57,7 +57,7 @@ async def complete_step(key: str, person: Consenting) -> StepView:
 
 @router.get("/events")
 async def events(person: Consenting, scope: Literal["upcoming", "past"] = "upcoming") -> EventList:
-    items = await person.events.list_by_scope(scope)
+    items = await person.events.list_by_scope(scope, limit=MAX_PAGE)
     return EventList(items=list(await person.events.views(items, viewer=person.user)))
 
 

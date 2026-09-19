@@ -1,15 +1,17 @@
 """App factory. Importing or exporting OpenAPI never connects to the database."""
 
 import logging
+import traceback
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from email.utils import format_datetime
-from typing import Any
+from typing import Any, Final
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from campus.api.routers import organizer, student
@@ -18,11 +20,22 @@ from campus.config import Settings, load_university_config
 from campus.db.runtime import database_healthy
 from campus.db.session import create_engine, create_session_factory
 from campus.domain.clock import Clock, SystemClock
-from campus.domain.context import DomainConfig
+from campus.domain.context import CHECKIN_RATE_LIMIT_WINDOW, DomainConfig
 from campus.domain.errors import DomainError, ValidationFailedError
 from campus.i18n import translator
 
 logger = logging.getLogger(__name__)
+
+_TOO_MANY_REQUESTS: Final = 429
+# Bodies are small by §7: the largest field any endpoint accepts is a 4000-character
+# description. Anything past this is refused before it is read into memory.
+MAX_REQUEST_BODY_BYTES: Final = 256 * 1024
+
+
+def _route_template(scope: Scope) -> str | None:
+    """The route pattern, never the resolved path: §7 keeps ids and codes out of the logs."""
+    route = scope.get("route")
+    return getattr(route, "path", None)
 
 
 class DateHeaderMiddleware:
@@ -39,10 +52,11 @@ class DateHeaderMiddleware:
             nonlocal started
             if message["type"] == "http.response.start":
                 started = True
-                headers = list(message.get("headers", []))
-                headers.append((b"date", format_datetime(self.clock.now(), usegmt=True).encode()))
-                headers.append((b"cache-control", b"no-store"))
-                message["headers"] = headers
+                # Assignment, not append: a second Date would violate RFC 9110 the moment
+                # this runs behind a server that writes its own.
+                headers = MutableHeaders(scope=message)
+                headers["date"] = format_datetime(self.clock.now(), usegmt=True)
+                headers["cache-control"] = "no-store"
             await send(message)
 
         try:
@@ -52,8 +66,43 @@ class DateHeaderMiddleware:
                 raise
             # Uvicorn otherwise logs even handled 500 tracebacks, potentially exposing SQL
             # parameters. End the HTTP failure here and log only its type.
-            logger.error("Request failed", extra={"error_type": type(error).__name__})
+            logger.error(
+                "Request failed",
+                extra={
+                    "error_type": type(error).__name__,
+                    "method": scope.get("method"),
+                    "route": _route_template(scope),
+                    # Frames carry file, line and source text — never parameter values.
+                    "frames": traceback.format_tb(error.__traceback__),
+                },
+            )
             await Response(status_code=500)(scope, receive, dated_send)
+
+
+class BodySizeLimitMiddleware:
+    """Refuse an oversized body by its Content-Length, before anything reads it."""
+
+    def __init__(self, app: ASGIApp, limit: int = MAX_REQUEST_BODY_BYTES) -> None:
+        self.app = app
+        self.limit = limit
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            declared = Headers(scope=scope).get("content-length")
+            if declared is not None and declared.isdigit() and int(declared) > self.limit:
+                error = ValidationFailedError("body")
+                response = JSONResponse(
+                    {
+                        "error": {
+                            "code": error.code,
+                            "message": translator().error("ru", error.message_key, **error.params),
+                        }
+                    },
+                    status_code=error.http_status,
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
 
 
 def error_response(request: Request, error: DomainError) -> Response:
@@ -61,7 +110,11 @@ def error_response(request: Request, error: DomainError) -> Response:
         logger.error("Internal domain failure", extra={"error_type": type(error).__name__})
         return Response(status_code=500)
     language = getattr(request.state, "lang", "ru")
-    headers = {"Retry-After": "600"} if error.http_status == 429 else {}
+    headers = (
+        {"Retry-After": str(int(CHECKIN_RATE_LIMIT_WINDOW.total_seconds()))}
+        if error.http_status == _TOO_MANY_REQUESTS
+        else {}
+    )
     return JSONResponse(
         {
             "error": {
@@ -76,6 +129,7 @@ def error_response(request: Request, error: DomainError) -> Response:
 
 def create_app(
     *,
+    expose_docs: bool = False,
     settings: Settings | None = None,
     config: DomainConfig | None = None,
     engine: AsyncEngine | None = None,
@@ -102,16 +156,41 @@ def create_app(
             if owned_engine:
                 await actual_engine.dispose()
 
-    responses: dict[int | str, dict[str, Any]] = {
-        status: {"model": ErrorBody} for status in (400, 401, 403, 404, 409, 422, 429)
+    # §7 promises the mini-app a Date on every response and a Retry-After on 429; the types
+    # are generated from this document, so both belong in it.
+    date_header = {
+        "Date": {"schema": {"type": "string"}, "description": "Server time, UTC (RFC 9110)."}
     }
-    app = FastAPI(title="Campus API", version="0.2.0", lifespan=lifespan)
+    responses: dict[int | str, dict[str, Any]] = {
+        status: {"model": ErrorBody, "headers": dict(date_header)}
+        for status in (400, 401, 403, 404, 409, 422)
+    }
+    responses[429] = {
+        "model": ErrorBody,
+        "headers": {
+            **date_header,
+            "Retry-After": {
+                "schema": {"type": "integer"},
+                "description": "Seconds to wait before retrying.",
+            },
+        },
+    }
+    app = FastAPI(
+        title="Campus API",
+        version="0.2.0",
+        lifespan=lifespan,
+        # The contract is published as docs/openapi.json (§7). A live Swagger UI would put a
+        # third-party CDN script on the mini-app's own origin for no one's benefit.
+        docs_url="/docs" if expose_docs else None,
+        redoc_url="/redoc" if expose_docs else None,
+    )
     app.state.clock = active_clock
     app.state.settings = settings
     app.state.config = config
     app.state.engine = engine
     app.state.session_factory = session_factory
     app.add_middleware(DateHeaderMiddleware, clock=active_clock)
+    app.add_middleware(BodySizeLimitMiddleware)
 
     @app.exception_handler(DomainError)
     async def domain_error(request: Request, error: DomainError) -> Response:

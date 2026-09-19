@@ -133,7 +133,14 @@ class FakeMaxClient:
             body=MessageBody(mid=message_id, text=body.text),
         )
 
-    async def edit_message(self, *, message_id: str, body: NewMessageBody) -> None:
+    async def edit_message(
+        self,
+        *,
+        message_id: str,
+        body: NewMessageBody,
+        user_id: int | None = None,
+        chat_id: int | None = None,
+    ) -> None:
         self._record("edit_message", message_id=message_id, body=body)
         self.edited[message_id] = body
 

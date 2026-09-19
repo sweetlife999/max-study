@@ -93,7 +93,14 @@ class MaxClient(Protocol):
         """POST /messages — exactly one of ``user_id`` / ``chat_id`` must be given."""
         ...
 
-    async def edit_message(self, *, message_id: str, body: NewMessageBody) -> None:
+    async def edit_message(
+        self,
+        *,
+        message_id: str,
+        body: NewMessageBody,
+        user_id: int | None = None,
+        chat_id: int | None = None,
+    ) -> None:
         """PUT /messages?message_id=... — used to rotate the QR image in place."""
         ...
 

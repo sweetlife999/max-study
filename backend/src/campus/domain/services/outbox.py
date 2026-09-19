@@ -132,7 +132,9 @@ class OutboxService(Service):
         message.last_error = None
         await self.session.flush()
 
-    async def mark_failed(self, message: OutboxMessage, error: str) -> None:
+    async def mark_failed(
+        self, message: OutboxMessage, error: str, *, retry_after: float | None = None
+    ) -> None:
         """Schedule a retry, or give up after ``OUTBOX_MAX_ATTEMPTS``."""
         message.attempts += 1
         message.last_error = error[:_ERROR_LIMIT]
@@ -140,7 +142,10 @@ class OutboxService(Service):
             message.status = "failed"
         else:
             message.status = "pending"
-            message.run_at = self.now() + retry_delay(message.attempts)
+            delay = retry_delay(message.attempts)
+            if retry_after is not None and retry_after > delay.total_seconds():
+                delay = timedelta(seconds=retry_after)
+            message.run_at = self.now() + delay
         await self.session.flush()
 
     async def count(self, *, status: str | None = None) -> int:

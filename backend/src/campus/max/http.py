@@ -20,7 +20,9 @@ store. Verification is never disabled.
 
 import asyncio
 import logging
+import math
 import ssl
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final
@@ -117,11 +119,13 @@ class HttpMaxClient:
         if not token:
             msg = "MAX bot token must not be empty"
             raise ValueError(msg)
+        self._retry_not_before = 0.0
         self._token = token
         self._max_attempts = max(1, max_attempts)
         self._sleep = sleep
         self._bucket = global_bucket or TokenBucket()
         self._chats = per_chat_limiter or PerChatLimiter()
+        self._message_destinations: dict[str, str] = {}
         verify: Any = build_ssl_context(ca_bundle) if transport is None else True
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
@@ -162,6 +166,9 @@ class HttpMaxClient:
         label = f"{method} {url}"
         last_error: Exception | None = None
         for attempt in range(1, self._max_attempts + 1):
+            cooldown = self._retry_not_before - time.monotonic()
+            if cooldown > 0:
+                await self._sleep(cooldown)
             await self._bucket.acquire()
             await self._chats.acquire(chat_key)
             try:
@@ -183,6 +190,10 @@ class HttpMaxClient:
                         raise
                     last_error = exc
             if attempt == self._max_attempts:
+                if isinstance(last_error, MaxRateLimitError):
+                    self._retry_not_before = time.monotonic() + self._retry_delay(
+                        attempt, last_error
+                    )
                 break
             await self._sleep(self._retry_delay(attempt, last_error))
         raise last_error if last_error else MaxTransportError(label)
@@ -190,7 +201,7 @@ class HttpMaxClient:
     @staticmethod
     def _retry_delay(attempt: int, error: Exception | None) -> float:
         if isinstance(error, MaxRateLimitError) and error.retry_after is not None:
-            return min(RETRY_MAX_DELAY_SECONDS, max(0.0, error.retry_after))
+            return max(0.0, error.retry_after)
         return min(RETRY_MAX_DELAY_SECONDS, RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)))
 
     @staticmethod
@@ -271,15 +282,31 @@ class HttpMaxClient:
             chat_key=_chat_key(user_id, chat_id),
         )
         envelope = payload if isinstance(payload, Mapping) else {}
-        return Message.model_validate(envelope.get("message", envelope))
+        message = Message.model_validate(envelope.get("message", envelope))
+        if message.message_id is not None:
+            if len(self._message_destinations) >= 4096:
+                self._message_destinations.pop(next(iter(self._message_destinations)))
+            self._message_destinations[message.message_id] = _chat_key(user_id, chat_id)
+        return message
 
-    async def edit_message(self, *, message_id: str, body: NewMessageBody) -> None:
+    async def edit_message(
+        self,
+        *,
+        message_id: str,
+        body: NewMessageBody,
+        user_id: int | None = None,
+        chat_id: int | None = None,
+    ) -> None:
         payload = await self._request(
             "PUT",
             "/messages",
             params={"message_id": message_id},
             json=body.to_payload(),
-            chat_key=f"message:{message_id}",
+            chat_key=(
+                _chat_key(user_id, chat_id)
+                if user_id is not None or chat_id is not None
+                else self._message_destinations.get(message_id, f"message:{message_id}")
+            ),
         )
         self._require_success(payload, "PUT /messages")
 
@@ -372,6 +399,7 @@ def _retry_after(response: httpx.Response) -> float | None:
     if raw is None:
         return None
     try:
-        return float(raw)
+        value = float(raw)
+        return value if math.isfinite(value) and value >= 0 else None
     except ValueError:
         return None

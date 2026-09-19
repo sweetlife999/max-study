@@ -19,37 +19,53 @@ from campus.domain.services.outbox import OutboxService
 
 @dataclass(frozen=True, slots=True)
 class QrDisplayService(Service):
+    async def get(self, display_id: int, *, for_update: bool = False) -> QrDisplay | None:
+        statement = select(QrDisplay).where(QrDisplay.id == display_id)
+        if for_update:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
+        return (await self.session.execute(statement)).scalars().one_or_none()
+
     @property
     def _outbox(self) -> OutboxService:
         return OutboxService(self.session, self.config, self.clock)
 
-    async def active_for(self, *, organizer_id: int, event_id: int) -> QrDisplay | None:
-        result = await self.session.execute(
-            select(QrDisplay).where(
-                QrDisplay.organizer_id == organizer_id,
-                QrDisplay.event_id == event_id,
-                QrDisplay.stopped_at.is_(None),
-            )
+    async def active_for(
+        self, *, organizer_id: int, event_id: int, for_update: bool = False
+    ) -> QrDisplay | None:
+        statement = select(QrDisplay).where(
+            QrDisplay.organizer_id == organizer_id,
+            QrDisplay.event_id == event_id,
+            QrDisplay.stopped_at.is_(None),
         )
-        return result.scalars().one_or_none()
+        if for_update:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
+        return (await self.session.execute(statement)).scalars().one_or_none()
 
-    async def active(self, *, now: datetime | None = None) -> Sequence[QrDisplay]:
+    async def active(
+        self, *, now: datetime | None = None, for_update: bool = False
+    ) -> Sequence[QrDisplay]:
         """Displays that should still be drawing: not stopped and not past their end."""
         moment = now or self.now()
-        result = await self.session.execute(
+        statement = (
             select(QrDisplay)
             .where(QrDisplay.stopped_at.is_(None), QrDisplay.active_until > moment)
             .order_by(QrDisplay.id)
         )
-        return result.scalars().all()
+        if for_update:
+            statement = statement.with_for_update(skip_locked=True).execution_options(
+                populate_existing=True
+            )
+        return (await self.session.execute(statement)).scalars().all()
 
-    async def due(self, *, now: datetime | None = None) -> Sequence[QrDisplay]:
+    async def due(
+        self, *, now: datetime | None = None, for_update: bool = False
+    ) -> Sequence[QrDisplay]:
         """Active displays whose drawn window is no longer the current one."""
         moment = now or self.now()
         window = codes.window_for(moment, self.config.checkin_code_step_seconds)
         return [
             display
-            for display in await self.active(now=moment)
+            for display in await self.active(now=moment, for_update=for_update)
             if display.last_rendered_window != window
         ]
 
@@ -122,7 +138,9 @@ class QrDisplayService(Service):
         return display
 
     async def stop_for(self, *, organizer_id: int, event_id: int) -> QrDisplay:
-        display = await self.active_for(organizer_id=organizer_id, event_id=event_id)
+        display = await self.active_for(
+            organizer_id=organizer_id, event_id=event_id, for_update=True
+        )
         if display is None:
             raise QrDisplayNotFoundError(f"no active display for event {event_id}")
         return await self.stop(display)

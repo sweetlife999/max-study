@@ -66,3 +66,5 @@ bot:
   invite_accepted: "Invitation accepted. Organizer features are now available."
   reminder: "Reminder: {title}\nWhen: {starts_at}\nWhere: {location}"
   qr_caption: "Code: {code}\nChecked in: {attendees_count}\nDisplay until: {ends_at}"
+  datetime_format: "%Y-%m-%d %H:%M %Z"
+  short_datetime_format: "%b %d, %H:%M"

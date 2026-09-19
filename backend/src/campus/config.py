@@ -124,6 +124,18 @@ class Settings(DatabaseSettings):
             raise ConfigError(msg)
         return self.max_bot_token.get_secret_value()
 
+    def require_bot_username(self) -> str:
+        """Fail at start-up rather than on every QR render.
+
+        Deep links are built from the bot's name (§5), so without it the QR worker raises on
+        each tick forever and the menu ships a button with nowhere to go. §6 wants a bad
+        configuration to stop the process.
+        """
+        if self.max_bot_username is None:
+            msg = "MAX_BOT_USERNAME is required for this process"
+            raise ConfigError(msg)
+        return self.max_bot_username
+
 
 # --- university YAML ---------------------------------------------------------------------------
 

@@ -66,3 +66,5 @@ bot:
   invite_accepted: "Приглашение принято. Теперь вам доступны функции организатора."
   reminder: "Напоминание: {title}\nКогда: {starts_at}\nГде: {location}"
   qr_caption: "Код: {code}\nОтметились: {attendees_count}\nПоказ до: {ends_at}"
+  datetime_format: "%d.%m.%Y %H:%M %Z"
+  short_datetime_format: "%d.%m %H:%M"

@@ -16,7 +16,13 @@ from campus.max.client import (
     MaxRateLimitError,
     MaxTransportError,
 )
-from campus.max.http import HttpMaxClient, build_ssl_context
+from campus.max.http import (
+    RETRY_MAX_DELAY_SECONDS as RETRY_MAX_DELAY,
+)
+from campus.max.http import (
+    HttpMaxClient,
+    build_ssl_context,
+)
 from campus.max.ratelimit import PerChatLimiter, TokenBucket
 from campus.max.types import LinkButton as Link
 from campus.max.types import NewMessageBody, keyboard
@@ -436,8 +442,12 @@ async def test_closing_releases_both_transports() -> None:
     await client.aclose()  # must not raise
 
 
-def test_retry_after_is_not_truncated_to_client_backoff_cap() -> None:
-    assert HttpMaxClient._retry_delay(1, MaxRateLimitError(retry_after=600)) == 600
+def test_retry_after_is_honoured_but_capped() -> None:
+    # The value is also the client-wide cooldown checked before every later request, so one
+    # throttled chat must not be able to stop polling and QR rotation for ten minutes.
+    assert HttpMaxClient._retry_delay(1, MaxRateLimitError(retry_after=5)) == 5
+    assert HttpMaxClient._retry_delay(1, MaxRateLimitError(retry_after=600)) == RETRY_MAX_DELAY
+    assert HttpMaxClient._retry_delay(1, MaxRateLimitError(retry_after=-1)) == 0.0
 
 
 async def test_edits_share_recipient_limit_across_message_ids_and_restart() -> None:
@@ -464,7 +474,9 @@ async def test_exhausted_429_delays_next_operation() -> None:
         await client.get_me()
     await client.get_me()
     assert len(rec.slept) == 1
-    assert rec.slept[0] > 599
+    # The next operation waits out the cooldown, but the cooldown itself is bounded: a
+    # ten-minute Retry-After must not take polling and QR rotation down with it.
+    assert 0 < rec.slept[0] <= RETRY_MAX_DELAY
     await client.aclose()
 
 

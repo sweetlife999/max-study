@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Final
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -18,9 +19,14 @@ Dispatch = Callable[[Update], Awaitable[None]]
 Checkpoint = Callable[[int | None], Awaitable[None]]
 
 
+# MAX may answer 429 with an arbitrarily long Retry-After. Honour it, but never stop reading
+# updates for longer than this: §8 makes polling the bot's only way to hear anything at all.
+POLL_RETRY_MAX_DELAY: Final = 60.0
+
+
 def retry_delay(error: Exception) -> float:
     if isinstance(error, MaxRateLimitError) and error.retry_after is not None:
-        return max(0.0, error.retry_after)
+        return min(POLL_RETRY_MAX_DELAY, max(0.0, error.retry_after))
     return 5.0
 
 
@@ -30,6 +36,10 @@ async def process_page(page: UpdatesPage, dispatch: Dispatch, checkpoint: Checkp
             await dispatch(update)
         except Exception as exc:
             logger.warning("update_failed", extra={"error_type": type(exc).__name__})
+    if page.marker is None:
+        # An idle long poll carries no marker. Storing None deletes the checkpoint, and the
+        # next GET /updates would replay everything MAX still holds.
+        return
     await checkpoint(page.marker)
 
 

@@ -1,8 +1,10 @@
 from datetime import timedelta
 
+import pytest
+
 from campus.bot.workers.outbox import OutboxWorker
 from campus.bot.workers.qr import QrWorker
-from campus.max.client import MaxRateLimitError, MaxTransportError
+from campus.max.client import MaxAuthError, MaxRateLimitError, MaxTransportError
 from campus.max.fake import FakeMaxClient
 from tests.integration.factories import World
 
@@ -142,3 +144,21 @@ async def test_polling_persists_marker_only_after_dispatch(world: World) -> None
         world.kv.set_updates_marker,
     )
     assert await world.kv.updates_marker() == 20
+
+
+async def test_a_revoked_token_stops_the_worker_instead_of_failing_every_row(
+    world: World,
+) -> None:
+    """A 401 is not a delivery failure: retrying it five times per row buries the queue."""
+    user = await world.user()
+    row = await world.outbox.enqueue(user_id=user.id, kind="invite_accepted")
+    assert row is not None
+    client = FakeMaxClient()
+    client.fail_next("send_message", MaxAuthError("revoked"))
+    worker = OutboxWorker(client, world.config, world.clock)
+
+    with pytest.raises(MaxAuthError):
+        await worker.tick(world.session)
+
+    assert row.status == "pending"
+    assert row.attempts == 0

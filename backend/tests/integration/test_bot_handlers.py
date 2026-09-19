@@ -3,8 +3,10 @@
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import select
 
 from campus.bot.handlers.core import Handler
+from campus.db.models import OutboxMessage
 from campus.domain.errors import NotEventOwnerError, TooManyAttemptsError
 from campus.max.fake import FakeMaxClient
 from campus.max.types import BotStartedUpdate, Callback, MessageCallbackUpdate
@@ -162,6 +164,12 @@ async def test_chat_commands_code_mode_and_event_lists(world):
     await handler.action(user, "unrecognized")
     own_handler, own_client = make_handler(world, organizer)
     await own_handler.action(organizer, "my_events")
+    # The list is one message with a button per event; the organizer's controls live on the
+    # card, so that twenty-five events cost one message rather than twenty-five.
+    listing = own_client.last_sent().body.model_dump_json()
+    assert f"event:{event.id}" in listing
+    assert "qr_start:" not in listing
+    await own_handler.action(organizer, f"event:{event.id}")
     assert "qr_start:" in own_client.last_sent().body.model_dump_json()
 
 
@@ -183,3 +191,63 @@ async def test_unrelated_ambiguous_selection_cannot_check_in(world):
     handler, _ = make_handler(world, user)
     with pytest.raises(InvalidCodeError):
         await handler.action(user, "choose:99")
+
+
+async def test_stray_text_leaves_code_mode_without_spending_an_attempt(world):
+    """§8: the *next six digits* are a code. A stray word is not a guess (§5 allows ten)."""
+    from campus.max.types import Message, MessageBody, MessageCreatedUpdate
+
+    user = await world.user()
+    handler, client = make_handler(world, user)
+    actor = MaxUser(user_id=user.max_user_id)
+    await handler.action(user, "code")
+
+    for _ in range(12):
+        await handler.handle(
+            MessageCreatedUpdate(
+                message=Message(sender=actor, body=MessageBody(mid="m", text="привет"))
+            ),
+            actor,
+        )
+
+    assert await world.checkins.recent_attempts(user.id) == 0
+    # The mode is gone, so the user is back in the menu rather than trapped in code entry.
+    assert client.last_sent().text == "Что хотите сделать?"
+
+
+async def test_a_chat_checkin_is_confirmed_once(world):
+    """The domain queues a confirmation for the outbox; answering in chat must cancel it."""
+    organizer = await world.organizer()
+    event = await world.event(organizer=organizer, checkin_open=True, starts_in=timedelta())
+    user = await world.user()
+    handler, client = make_handler(world, user)
+
+    await handler.checkin(user, world.events.current_code(event).code)
+
+    assert "подтверждена" in client.last_sent().text
+    pending = (
+        (
+            await world.session.execute(
+                select(OutboxMessage.kind).where(OutboxMessage.status == "pending")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # The confirmation was answered in chat, so its queued twin is gone. step_completed was
+    # never sent from here and is still the outbox's to deliver.
+    assert "checkin_confirmed" not in pending
+    assert "step_completed" in pending
+
+
+async def test_expired_conversation_state_is_forgotten(world):
+    """An invitation token left by someone who never consented must not live in kv forever."""
+    user = await world.user(consent=False)
+    invite = await world.organizers.create_invite()
+    handler, _ = make_handler(world, user)
+    await handler.start(user, f"org_{invite.token}")
+
+    world.clock.advance(timedelta(hours=2))
+
+    assert await handler.state() == {}
+    assert await world.kv.get(handler.state_key) is None

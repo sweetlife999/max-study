@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 from pydantic import SecretStr
 
-from campus.bot.polling import process_page, retry_delay
+from campus.bot.polling import POLL_RETRY_MAX_DELAY, process_page, retry_delay
 from campus.max.client import MaxRateLimitError, MaxTransportError
 from campus.max.types import UnknownUpdate, UpdatesPage
 
@@ -37,9 +37,34 @@ async def test_cancelled_batch_does_not_checkpoint() -> None:
     save.assert_not_called()
 
 
-def test_backoff_honors_long_retry_after() -> None:
-    assert retry_delay(MaxRateLimitError(retry_after=600)) == 600
+async def test_page_without_a_marker_keeps_the_stored_one() -> None:
+    # An idle long poll answers with neither updates nor a marker. Checkpointing that would
+    # delete the stored marker and make MAX replay its whole retention on the next call.
+    dispatch = AsyncMock()
+    save = AsyncMock()
+
+    await process_page(UpdatesPage(updates=(), marker=None), dispatch, save)
+
+    dispatch.assert_not_called()
+    save.assert_not_called()
+
+
+async def test_handled_batch_without_a_marker_still_does_not_checkpoint() -> None:
+    dispatch = AsyncMock()
+    save = AsyncMock()
+
+    await process_page(UpdatesPage(updates=(UnknownUpdate(),), marker=None), dispatch, save)
+
+    dispatch.assert_awaited_once()
+    save.assert_not_called()
+
+
+def test_backoff_honors_retry_after_but_stays_bounded() -> None:
+    assert retry_delay(MaxRateLimitError(retry_after=30)) == 30
     assert retry_delay(MaxTransportError()) == 5
+    # A long Retry-After must not stop the bot for that long: §8 makes polling its only ear.
+    assert retry_delay(MaxRateLimitError(retry_after=600)) == POLL_RETRY_MAX_DELAY
+    assert retry_delay(MaxRateLimitError(retry_after=3600)) == POLL_RETRY_MAX_DELAY
 
 
 async def test_supervisor_cancels_workers_on_shutdown() -> None:

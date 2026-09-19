@@ -1,5 +1,6 @@
 """Transactional outbox delivery. Network retries are owned by the outbox schedule."""
 
+import logging
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,8 +11,10 @@ from campus.domain.clock import Clock
 from campus.domain.context import DomainConfig
 from campus.domain.services import EventService, OutboxService, QrDisplayService, UserService
 from campus.i18n import translator
-from campus.max.client import MaxClient, MaxRateLimitError
+from campus.max.client import MaxAuthError, MaxClient, MaxRateLimitError
 from campus.max.types import NewMessageBody
+
+logger = logging.getLogger(__name__)
 
 
 class OutboxWorker:
@@ -39,7 +42,7 @@ class OutboxWorker:
                 location=event.location,
                 starts_at=event.starts_at.astimezone(
                     ZoneInfo(self.config.university.university.timezone)
-                ).strftime("%d.%m %H:%M"),
+                ).strftime(translator().text(user.lang, "bot.short_datetime_format")),
                 points_total=await users.points(user.id),
             )
         elif row.kind == "step_completed":
@@ -58,8 +61,26 @@ class OutboxWorker:
         for row in await outbox.claim():
             try:
                 await self.deliver(session, row)
+            except MaxAuthError:
+                # The token is gone: every remaining row would burn its five attempts against
+                # the same 401 and end up `failed` beyond recovery. Let the process die instead
+                # — polling and the QR worker already treat this the same way.
+                raise
             except Exception as exc:
                 retry_after = exc.retry_after if isinstance(exc, MaxRateLimitError) else None
-                await outbox.mark_failed(row, type(exc).__name__, retry_after=retry_after)
+                await outbox.mark_failed(
+                    row,
+                    type(exc).__name__,
+                    retry_after=retry_after,
+                )
+                logger.warning(
+                    "outbox_delivery_failed",
+                    extra={
+                        "error_type": type(exc).__name__,
+                        "outbox_id": row.id,
+                        "kind": row.kind,
+                        "attempts": row.attempts,
+                    },
+                )
             else:
                 await outbox.mark_sent(row)

@@ -201,7 +201,11 @@ class HttpMaxClient:
     @staticmethod
     def _retry_delay(attempt: int, error: Exception | None) -> float:
         if isinstance(error, MaxRateLimitError) and error.retry_after is not None:
-            return max(0.0, error.retry_after)
+            # Respect the server's number, but never past the cap: this delay is also the
+            # client-wide cooldown every later request waits out, so an hour-long Retry-After
+            # from one chat would otherwise stop polling and QR rotation for that hour. The
+            # outbox keeps the full value for its own scheduling, where nothing is blocked.
+            return min(RETRY_MAX_DELAY_SECONDS, max(0.0, error.retry_after))
         return min(RETRY_MAX_DELAY_SECONDS, RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)))
 
     @staticmethod

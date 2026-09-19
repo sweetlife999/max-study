@@ -55,7 +55,7 @@ class QrWorker:
             attendees_count=view.attendees_count,
             ends_at=display.active_until.astimezone(
                 ZoneInfo(self.config.university.university.timezone)
-            ).strftime("%d.%m %H:%M"),
+            ).strftime(translator().text(user.lang, "bot.short_datetime_format")),
         )
         body = NewMessageBody(
             text=text[:4000],

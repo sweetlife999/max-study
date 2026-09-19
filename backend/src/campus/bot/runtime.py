@@ -68,6 +68,7 @@ async def run(settings: Settings | None = None, *, stop: asyncio.Event | None = 
     settings = settings or Settings()  # pyright: ignore[reportCallIssue]
     university = load_university_config(settings.university_config_path)
     token = settings.require_bot_token()
+    settings.require_bot_username()
     configure_logging(settings.log_level)
     config = DomainConfig.from_settings(settings, university)
     clock = SystemClock()

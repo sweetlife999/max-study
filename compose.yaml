@@ -1,15 +1,10 @@
 # Local stack (ARCHITECTURE.md §11): `docker compose up --build` from a clean clone.
 #
-# What works today:
-#     docker compose up --build postgres migrate seed api bot
-#
-# Do not add `--exit-code-from`: it implies --abort-on-container-exit, so `migrate` finishing
-# tears the network down while `seed` is still connecting. To check exit codes (CI does),
-# run the one-shot services on their own:
+# `migrate` and `seed` are one-shot services. Do not add `--exit-code-from`: it implies
+# --abort-on-container-exit, so `migrate` finishing tears the network down while `seed` is still
+# connecting. To check their exit codes independently (CI does), run:
 #     docker compose up --build --wait postgres
 #     docker compose run --rm migrate && docker compose run --rm seed
-# `web` (Caddy serving the mini-app and /api) is defined by its own branch; its place is marked
-# below so that adding it is a service block, not a rewrite of this file.
 #
 # Copy .env.example to .env first; compose reads it automatically.
 
@@ -58,7 +53,7 @@ services:
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-}
       CHECKIN_CODE_STEP_SECONDS: ${CHECKIN_CODE_STEP_SECONDS:-10}
       CHECKIN_CODE_TOLERANCE_STEPS: ${CHECKIN_CODE_TOLERANCE_STEPS:-2}
-      INIT_DATA_TTL_SECONDS: ${INIT_DATA_TTL_SECONDS:-86400}
+      INIT_DATA_TTL_SECONDS: ${INIT_DATA_TTL_SECONDS:-3600}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
       postgres:
@@ -95,8 +90,7 @@ services:
       retries: 12
       start_period: 10s
     ports:
-      # Published for local work and for the jury before `web` fronts it; inside the network
-      # the mini-app reaches it as `api:8000`.
+      # Published for direct local API work; web reaches it over the Compose network.
       - "${API_PORT:-8000}:8000"
     restart: unless-stopped
 
@@ -114,7 +108,29 @@ services:
       replicas: 1
     restart: unless-stopped
 
-  # web: build: {context: ., dockerfile: web/Dockerfile} — Caddy serving the mini-app and /api
+  web:
+    build:
+      # web/Dockerfile copies package.json and Caddyfile from the context root.
+      context: ./web
+      dockerfile: Dockerfile
+    image: campus-web:local
+    environment:
+      # Keep the browser on one origin: Caddy forwards /api/* over the private network.
+      API_UPSTREAM: api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    ports:
+      - "8080:80"
+    restart: unless-stopped
 
 volumes:
   postgres-data:

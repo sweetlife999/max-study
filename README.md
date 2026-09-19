@@ -12,21 +12,21 @@
 ## Быстрый старт
 
 ```sh
-cp .env.example .env          # секретов в репозитории нет, .env в .gitignore
-docker compose up --build --wait postgres
-docker compose run --rm migrate
-docker compose run --rm seed  # печатает приглашение организатора
-docker compose up --build -d api bot
+cp .env.example .env  # секретов в репозитории нет, .env в .gitignore
+# Впишите в .env настоящий MAX_BOT_TOKEN и имя бота в MAX_BOT_USERNAME.
+docker compose up --build
 ```
 
-`seed` идемпотентен: второй запуск ничего не меняет. `api` слушает `http://localhost:8000`
-(порт меняется через `API_PORT`), проверить — `curl http://localhost:8000/health`.
+Эта команда поднимает PostgreSQL, применяет миграции, идемпотентно загружает демо-данные,
+запускает API, бота и Caddy с мини-приложением. Мини-приложение доступно на
+`http://localhost:8080`; запросы к `/api` Caddy отправляет сервису `api` внутри Compose-сети.
+Сам `api` также слушает `http://localhost:8000` (порт меняется через `API_PORT`), проверить его
+можно командой `curl http://localhost:8000/health`. При первом запуске найдите в логах `seed`
+приглашение организатора. Остановка стека: `docker compose down`.
 
 `api` и `bot` без `MAX_BOT_TOKEN` в `.env` не стартуют и будут перезапускаться — это
 намеренно: бот без токена не может опрашивать MAX, а api не может проверить подпись
 `initData` ни одного запроса (§7). Токен выдаёт @MasterBot; впишите его в `.env` до запуска.
-Сервис `web` (Caddy) добавляет своя ветка — место для него размечено в
-[`compose.yaml`](compose.yaml).
 
 ## Repository
 
@@ -78,7 +78,17 @@ uv run alembic check               # модели не должны расход
 ```sh
 cd web
 npm install
+npm run api:types:check
 npm run lint && npm run typecheck && npm run test && npm run build
+```
+
+После изменения `docs/openapi.json` обновите сгенерированные типы командой
+`npm run api:types`.
+
+Production-like образ мини-приложения собирается из каталога `web/` и запускается через Caddy:
+
+```sh
+docker build -t campus-web:local web
 ```
 
 ## Переменные окружения

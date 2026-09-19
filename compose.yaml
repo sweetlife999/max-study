@@ -1,15 +1,15 @@
 # Local stack (ARCHITECTURE.md §11): `docker compose up --build` from a clean clone.
 #
 # What works today:
-#     docker compose up --build postgres migrate seed
+#     docker compose up --build postgres migrate seed api bot
 #
 # Do not add `--exit-code-from`: it implies --abort-on-container-exit, so `migrate` finishing
 # tears the network down while `seed` is still connecting. To check exit codes (CI does),
 # run the one-shot services on their own:
 #     docker compose up --build --wait postgres
 #     docker compose run --rm migrate && docker compose run --rm seed
-# `api`, `bot` and `web` are defined by their own branches; their places are marked below so
-# that adding them is a service block, not a rewrite of this file.
+# `web` (Caddy serving the mini-app and /api) is defined by its own branch; its place is marked
+# below so that adding it is a service block, not a rewrite of this file.
 #
 # Copy .env.example to .env first; compose reads it automatically.
 
@@ -76,13 +76,45 @@ services:
     restart: "no"
 
   # --- long-running services --------------------------------------------------------------------
-  # Left to the branches that build them. Each needs `build: *backend-build`,
-  # `environment: *backend-env` and `depends_on: {migrate: {condition:
-  # service_completed_successfully}}`.
-  #
-  # api:   command: ["python", "-m", "campus.api"]    — FastAPI behind web, port 8000
-  # bot:   command: ["python", "-m", "campus.bot"]    — exactly one replica (§2: advisory lock)
-  # web:   build: {context: ., dockerfile: web/Dockerfile} — Caddy serving the mini-app and /api
+
+  api:
+    build: *backend-build
+    image: campus-backend:local
+    command: ["python", "-m", "campus.api"]
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # §7 GET /health reports the database too, so an api that cannot reach postgres is
+      # unhealthy rather than merely listening. No curl in the runtime image: use python.
+      test:
+        ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    ports:
+      # Published for local work and for the jury before `web` fronts it; inside the network
+      # the mini-app reaches it as `api:8000`.
+      - "${API_PORT:-8000}:8000"
+    restart: unless-stopped
+
+  bot:
+    build: *backend-build
+    image: campus-backend:local
+    command: ["python", "-m", "campus.bot"]
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Exactly one replica: §8 polls with a single marker in kv and the runtime holds a Postgres
+    # advisory lock, so a second replica would idle at best and double-send at worst.
+    deploy:
+      replicas: 1
+    restart: unless-stopped
+
+  # web: build: {context: ., dockerfile: web/Dockerfile} — Caddy serving the mini-app and /api
 
 volumes:
   postgres-data:

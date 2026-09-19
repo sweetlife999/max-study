@@ -16,19 +16,25 @@ cp .env.example .env          # секретов в репозитории не�
 docker compose up --build --wait postgres
 docker compose run --rm migrate
 docker compose run --rm seed  # печатает приглашение организатора
+docker compose up --build -d api bot
 ```
 
-`seed` идемпотентен: второй запуск ничего не меняет. Сервисы `api`, `bot` и `web` добавляют
-свои ветки — места для них размечены в [`compose.yaml`](compose.yaml).
+`seed` идемпотентен: второй запуск ничего не меняет. `api` слушает `http://localhost:8000`
+(порт меняется через `API_PORT`), проверить — `curl http://localhost:8000/health`.
+
+`bot` без `MAX_BOT_TOKEN` в `.env` не стартует и будет перезапускаться: токен выдаёт
+@MasterBot, без него чат-сценарии §8 не проверить. `api` поднимется и без токена, но
+`initData` мини-приложения проверить не сможет. Сервис `web` (Caddy) добавляет своя ветка —
+место для него размечено в [`compose.yaml`](compose.yaml).
 
 ## Repository
 
 | Путь | Что там |
 |---|---|
-| `backend/` | пакет `campus`: конфиг, модели, миграции, доменные сервисы, клиент MAX, i18n, seed |
+| `backend/` | пакет `campus`: конфиг, модели, миграции, доменные сервисы, клиент MAX, i18n, seed, HTTP-API (`campus.api`) и бот (`campus.bot`) |
 | `web/` | мини-приложение: Vite + React + TypeScript + `@maxhub/max-ui` |
 | `config/` | YAML вуза (§6 контракта) |
-| `docs/` | контракт и статус |
+| `docs/` | контракт, статус и сгенерированный `openapi.json` |
 | `.github/workflows/` | `backend.yml` и `web.yml` — гейты качества §11 |
 
 ## Backend локально
@@ -41,6 +47,17 @@ uv sync
 uv run ruff check && uv run ruff format --check
 uv run pyright
 uv run pytest --cov=campus --cov-report=term-missing
+```
+
+Процессы запускаются теми же командами, что и в контейнере: `uv run python -m campus.api`
+(FastAPI на порту 8000) и `uv run python -m campus.bot` (long polling, нужен `MAX_BOT_TOKEN`).
+
+Контракт для фронта пересобирается из приложения; CI падает, если файл устарел:
+
+```sh
+cd backend
+uv run python -m campus.api.openapi ../docs/openapi.json            # перегенерировать
+uv run python -m campus.api.openapi ../docs/openapi.json --check    # проверить, как в CI
 ```
 
 Интеграционные тесты работают на настоящем PostgreSQL: либо укажите `TEST_DATABASE_URL`, либо

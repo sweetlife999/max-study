@@ -74,6 +74,11 @@ jobs:
           uv run alembic upgrade head
           uv run alembic check
 
+      - name: openapi artifact is current
+        # §7: docs/openapi.json is the contract the mini-app generates its types from, so CI
+        # fails on a stale file rather than letting the two drift.
+        run: uv run python -m campus.api.openapi ../docs/openapi.json --check
+
       - name: pytest
         # TEST_DATABASE_URL points the integration tests at the service container above, so
         # testcontainers is never started inside the runner.
@@ -120,6 +125,13 @@ jobs:
 
       - name: Seeding twice must change nothing
         run: docker compose run --rm seed
+
+      - name: The api comes up healthy
+        # Its healthcheck is GET /health, which reports the database too (§7), so --wait
+        # returning means the image, the migrations and the connection all work.
+        # `bot` is not started here: it needs a real MAX_BOT_TOKEN, which CI has no business
+        # holding; §8's polling loop is covered by the integration tests instead.
+        run: docker compose up --build --wait api
 
       - name: Tear down
         if: always()

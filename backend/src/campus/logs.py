@@ -88,8 +88,10 @@ _AUTHORIZATION: Final = re.compile(r"(Authorization)\s*[=:]\s*\S+", re.IGNORECAS
 # serialise is logged as its repr (a frozen view, an ORM object), and a repr is free text: without
 # this, `QrCodeView(code='123456', ...)` put a live check-in code in the log, and `qr_seed=b'...'`
 # a seed. The value is a quoted string, a bytes literal or a run of non-delimiter characters.
+# The separator tolerates a closing quote so that the JSON and SQL-parameter forms
+# (`"code": "123456"`) are caught as surely as the repr form (`code='123456'`).
 _ASSIGNMENT: Final = re.compile(
-    r"([A-Za-z][A-Za-z0-9_.\- ]*?)(\s*[=:]\s*)(b?'[^']*'|b?\"[^\"]*\"|[^\s,;)\]}]+)"
+    r"([A-Za-z][A-Za-z0-9_.\- ]*?)([\"']?\s*[=:]\s*)(b?'[^']*'|b?\"[^\"]*\"|[^\s,;)\]}]+)"
 )
 
 _MAX_DEPTH: Final = 6
@@ -164,6 +166,17 @@ def _fallback(value: object) -> str:
     return mask_text(repr(value))
 
 
+_THIRD_PARTY_LOGGERS: Final = (
+    "sqlalchemy",
+    "sqlalchemy.engine",
+    "sqlalchemy.pool",
+    "asyncpg",
+    "httpx",
+    "httpcore",
+    "uvicorn.access",
+)
+
+
 def configure_logging(level: str = "INFO", *, stream: Any = None) -> None:
     """Install the JSON formatter as the process's only root handler. Safe to call twice."""
     handler = logging.StreamHandler(stream if stream is not None else sys.stderr)
@@ -173,3 +186,9 @@ def configure_logging(level: str = "INFO", *, stream: Any = None) -> None:
         root.removeHandler(existing)
     root.addHandler(handler)
     root.setLevel(level.upper())
+    # LOG_LEVEL is ours to set (§10), but DEBUG on the root logger would also switch on
+    # SQLAlchemy's statement echo — every INSERT with its bound parameters, which is where the
+    # check-in codes and qr_seeds live. These libraries never say anything we need below
+    # WARNING, so they are pinned there whatever the process level is.
+    for noisy in _THIRD_PARTY_LOGGERS:
+        logging.getLogger(noisy).setLevel(logging.WARNING)

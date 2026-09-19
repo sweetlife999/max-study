@@ -122,6 +122,24 @@ def test_a_sensitive_assignment_inside_free_text_is_masked() -> None:
     assert "s3cret" not in mask_text("token: s3cret")
 
 
+def test_a_quoted_key_is_masked_too() -> None:
+    # The shape SQLAlchemy and json.dumps produce. Conversation state carries a check-in code,
+    # so the JSON form has to be masked as surely as the repr form.
+    assert "123456" not in mask_text('{"mode": "code", "code": "123456"}')
+    assert "123456" not in mask_text("('bot_conversation:5', '{\"code\": \"123456\"}')")
+    assert "mode" in mask_text('{"mode": "code", "code": "123456"}')
+
+
+def test_noisy_third_party_loggers_stay_quiet_at_debug(capsys: pytest.CaptureFixture[str]) -> None:
+    # LOG_LEVEL=DEBUG is a documented setting (§10). It must not turn on SQLAlchemy's echo of
+    # statements and bound parameters, which would put check-in codes and qr_seeds in the log.
+    configure_logging("DEBUG")
+    logging.getLogger("sqlalchemy.engine.Engine").debug("INSERT INTO kv VALUES ('123456')")
+    logging.getLogger("asyncpg").debug("bound qr_seed")
+
+    assert capsys.readouterr().err == ""
+
+
 def test_an_insensitive_assignment_survives() -> None:
     assert mask_text("event_id=42 attendees=12") == "event_id=42 attendees=12"
 

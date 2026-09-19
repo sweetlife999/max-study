@@ -101,7 +101,7 @@ reminders_before: [PT24H, PT1H]
 Валидируется Pydantic при старте обоих процессов; невалидный конфиг — процесс не стартует.
 
 ## 7. API мини-приложения
-База `/api`. JSON. Аутентификация — заголовок `X-Max-Init-Data: <initData>` на каждом запросе; проверка подписи и срока (`auth_date` не старше `INIT_DATA_TTL_SECONDS`, default 86400) — **строго по dev.max.ru**. Пользователь создаётся при первом валидном запросе.
+База `/api`. JSON. Аутентификация — заголовок `X-Max-Init-Data: <initData>` на каждом запросе; проверка подписи и срока (`auth_date` не старше `INIT_DATA_TTL_SECONDS`, default 3600) — **строго по dev.max.ru**. Пользователь создаётся при первом валидном запросе.
 Ошибки: `{"error": {"code": "<snake_case>", "message": "<текст на языке пользователя>"}}` с HTTP-статусом (400/401/403/404/409/422/429).
 
 **Коды ошибок (закрытый список, фронт на них завязан):** `invalid_init_data` (401), `consent_required` (403), `not_organizer` (403), `not_admin` (403), `not_owner` (403), `checkin_closed` (403), `checkin_not_started` (403), `checkin_window_over` (403), `invalid_code` (400), `code_expired` (400), `ambiguous_code` (409), `event_not_found` (404), `step_not_found` (404), `step_not_manual` (409), `invite_invalid` (404), `invite_used` (409), `invite_expired` (409), `rate_limited` (429), `validation_error` (422). Новый код добавляется только вместе с правкой этого списка.

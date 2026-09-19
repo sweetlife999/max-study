@@ -9,8 +9,7 @@ Two fields separate concerns that a single ``code`` used to conflate:
 
 ``code``
     what goes on the wire. Several errors deliberately share one: every validation failure is
-    ``validation_error``, and an admin-only endpoint reuses ``not_organizer`` because §7 has no
-    admin-specific code.
+    ``validation_error``. Role failures distinguish organizers from administrators.
 ``message_key``
     which ``errors.<key>`` line of the i18n bundle the user reads. It defaults to ``code`` and is
     overridden where a shared code would otherwise cost the user a precise message.
@@ -26,6 +25,7 @@ API_ERROR_STATUSES: Final[dict[str, int]] = {
     "invalid_init_data": 401,
     "consent_required": 403,
     "not_organizer": 403,
+    "not_admin": 403,
     "not_owner": 403,
     "checkin_closed": 403,
     "checkin_not_started": 403,
@@ -132,11 +132,9 @@ class OrganizerRequiredError(DomainError):
 
 
 class AdminRequiredError(OrganizerRequiredError):
-    """§7 lists no admin-specific code, so this goes out as ``not_organizer``.
+    """The administrator-only endpoint has its own §7 error code."""
 
-    The distinction survives where it matters to the user: the message says "administrators".
-    """
-
+    code = "not_admin"
     message_key = "admin_required"
 
 

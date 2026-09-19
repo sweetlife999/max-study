@@ -17,6 +17,7 @@ CONTRACT: dict[str, int] = {
     "invalid_init_data": 401,
     "consent_required": 403,
     "not_organizer": 403,
+    "not_admin": 403,
     "not_owner": 403,
     "checkin_closed": 403,
     "checkin_not_started": 403,

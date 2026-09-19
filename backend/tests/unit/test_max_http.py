@@ -16,7 +16,13 @@ from campus.max.client import (
     MaxRateLimitError,
     MaxTransportError,
 )
-from campus.max.http import HttpMaxClient, build_ssl_context
+from campus.max.http import (
+    RETRY_MAX_DELAY_SECONDS as RETRY_MAX_DELAY,
+)
+from campus.max.http import (
+    HttpMaxClient,
+    build_ssl_context,
+)
 from campus.max.ratelimit import PerChatLimiter, TokenBucket
 from campus.max.types import LinkButton as Link
 from campus.max.types import NewMessageBody, keyboard
@@ -434,3 +440,51 @@ async def test_closing_releases_both_transports() -> None:
     client = make_client(Recorder())
 
     await client.aclose()  # must not raise
+
+
+def test_retry_after_is_honoured_but_capped() -> None:
+    # The value is also the client-wide cooldown checked before every later request, so one
+    # throttled chat must not be able to stop polling and QR rotation for ten minutes.
+    assert HttpMaxClient._retry_delay(1, MaxRateLimitError(retry_after=5)) == 5
+    assert HttpMaxClient._retry_delay(1, MaxRateLimitError(retry_after=600)) == RETRY_MAX_DELAY
+    assert HttpMaxClient._retry_delay(1, MaxRateLimitError(retry_after=-1)) == 0.0
+
+
+async def test_edits_share_recipient_limit_across_message_ids_and_restart() -> None:
+    rec = Recorder()
+    client = HttpMaxClient(
+        TOKEN,
+        transport=httpx.MockTransport(rec.handler),
+        per_chat_limiter=PerChatLimiter(monotonic=lambda: 0.0, sleep=rec.sleep),
+    )
+    await client.edit_message(message_id="persisted-1", body=NewMessageBody(text="x"), user_id=5)
+    await client.edit_message(message_id="persisted-2", body=NewMessageBody(text="y"), user_id=5)
+    assert rec.slept == [1.0]
+    assert "user_id" not in rec.last.url.params
+    await client.aclose()
+
+
+async def test_exhausted_429_delays_next_operation() -> None:
+    rec = Recorder(
+        httpx.Response(429, headers={"Retry-After": "600"}, json={}),
+        httpx.Response(200, json={"user_id": 1}),
+    )
+    client = make_client(rec, max_attempts=1)
+    with pytest.raises(MaxRateLimitError):
+        await client.get_me()
+    await client.get_me()
+    assert len(rec.slept) == 1
+    # The next operation waits out the cooldown, but the cooldown itself is bounded: a
+    # ten-minute Retry-After must not take polling and QR rotation down with it.
+    assert 0 < rec.slept[0] <= RETRY_MAX_DELAY
+    await client.aclose()
+
+
+@pytest.mark.parametrize("header", ["NaN", "inf", "-inf", "-10"])
+async def test_malformed_retry_after_does_not_create_unbounded_delay(header: str) -> None:
+    rec = Recorder(httpx.Response(429, headers={"Retry-After": header}, json={}))
+    client = make_client(rec, max_attempts=1)
+    with pytest.raises(MaxRateLimitError) as error:
+        await client.get_me()
+    assert error.value.retry_after is None
+    await client.aclose()

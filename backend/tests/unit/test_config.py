@@ -150,10 +150,15 @@ def test_settings_empty_admin_list_and_missing_token(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("UNIVERSITY_CONFIG_PATH", str(EXAMPLE))
     monkeypatch.setenv("ADMIN_MAX_USER_IDS", "")
     monkeypatch.delenv("MAX_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("MAX_BOT_USERNAME", raising=False)
     settings = Settings.from_env()
     assert settings.admin_max_user_ids == frozenset()
     with pytest.raises(ConfigError, match="MAX_BOT_TOKEN"):
         settings.require_bot_token()
+    # Without it no deep link can be built (§5), so the QR worker would fail on every tick
+    # forever and the menu would ship a button with nowhere to go.
+    with pytest.raises(ConfigError, match="MAX_BOT_USERNAME"):
+        settings.require_bot_username()
 
 
 @pytest.mark.parametrize(

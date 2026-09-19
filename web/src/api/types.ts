@@ -1,144 +1,84 @@
-/**
- * API types, written by hand strictly after docs/ARCHITECTURE.md §7.
- *
- * TODO: replace this single file with types generated from docs/openapi.json once the backend
- * publishes it. Nothing else in the app declares API shapes, so the swap stays local.
- *
- * All timestamps are ISO 8601 strings in UTC (§4).
- */
+import type {
+  AppConfigView,
+  AttendanceEntry,
+  AttendanceView,
+  CheckinRequest as GeneratedCheckinRequest,
+  CheckinResult as GeneratedCheckinResult,
+  ConfigStepView,
+  CreateEvent,
+  ErrorBody,
+  EventList as GeneratedEventList,
+  EventsApiEventsGetData,
+  EventView,
+  InviteView,
+  MeView,
+  OnboardingView,
+  QrCodeView,
+  StepView,
+  UniversityView,
+  UpdateEvent,
+  UpdateMe,
+} from './generated/types.gen';
 
-export type Lang = 'ru' | 'en';
+type Replace<Base, Replacements> = Omit<Base, keyof Replacements> & Replacements;
 
-export interface University {
-  name: string;
-  timezone: string;
-}
+export type Lang = UpdateMe['lang'];
 
-export interface Me {
-  id: number;
-  first_name: string;
-  lang: Lang;
-  consent: boolean;
-  is_organizer: boolean;
-  is_admin: boolean;
-  points: number;
-  university: University;
-}
+export type University = UniversityView;
 
-export interface UpdateMeRequest {
-  lang: Lang;
-}
-
+/** The API schema currently models this field as a string; keep the app's supported values narrow. */
 export type OnboardingStepType = 'event_kind' | 'manual';
 
-export interface Step {
-  key: string;
-  type: OnboardingStepType;
-  title: string;
-  description: string;
-  done: boolean;
-  event_kind?: string | null;
-}
+export type Me = Replace<MeView, { lang: Lang }>;
 
-export interface Onboarding {
-  steps: Step[];
-  done_count: number;
-  total: number;
-}
+export type UpdateMeRequest = UpdateMe;
 
-export interface Event {
-  id: number;
-  title: string;
-  description: string;
-  kind: string;
-  kind_title: string;
-  location: string;
-  starts_at: string;
-  ends_at: string;
-  points: number;
-  onboarding_step: string | null;
-  checkin_open: boolean;
-  rsvp: boolean;
-  checked_in: boolean;
-  attendees_count: number;
-}
+export type Step = Replace<StepView, { type: OnboardingStepType }>;
 
-export interface EventList {
-  items: Event[];
-}
+export type Onboarding = Replace<OnboardingView, { steps: Step[] }>;
 
-export type EventScope = 'upcoming' | 'past';
+export type Event = EventView;
 
-export type CheckinMethod = 'qr' | 'code';
+export type EventList = GeneratedEventList;
 
-export interface CheckinRequest {
-  event_id: number;
-  code: string;
-  method: CheckinMethod;
-}
+export type EventScope = NonNullable<NonNullable<EventsApiEventsGetData['query']>['scope']>;
 
-export interface CheckinResult {
-  event: Event;
-  already: boolean;
-  points_total: number;
-  completed_step?: Step | null;
-}
+export type CheckinMethod = GeneratedCheckinRequest['method'];
 
-export interface CreateEventRequest {
-  title: string;
-  description: string;
-  kind: string;
-  location: string;
-  starts_at: string;
-  ends_at: string;
-  points?: number;
-  onboarding_step?: string | null;
-}
+export type CheckinRequest = GeneratedCheckinRequest;
 
-export type UpdateEventRequest = Partial<CreateEventRequest> & { checkin_open?: boolean };
+export type CheckinResult = Replace<GeneratedCheckinResult, { completed_step?: Step | null }>;
 
-export interface EventQr {
-  code: string;
-  deeplink: string;
-  window_started_at: string;
-  expires_at: string;
-  step_seconds: number;
-}
+/** Keep the existing client contract, which never sends a null points value. */
+export type CreateEventRequest = Replace<
+  CreateEvent,
+  {
+    description: NonNullable<CreateEvent['description']>;
+    location: NonNullable<CreateEvent['location']>;
+    points?: Exclude<CreateEvent['points'], null | undefined>;
+  }
+>;
 
-export interface AttendanceItem {
-  user_id: number;
-  first_name: string;
-  method: CheckinMethod;
-  checked_in_at: string;
-}
+/** Keep the existing client contract: only onboarding_step may be explicitly cleared with null. */
+export type UpdateEventRequest = {
+  [Key in keyof UpdateEvent]?: Key extends 'onboarding_step'
+    ? UpdateEvent[Key]
+    : Exclude<UpdateEvent[Key], null | undefined>;
+};
 
-export interface Attendance {
-  items: AttendanceItem[];
-  rsvp_count: number;
-  checkin_count: number;
-}
+export type EventQr = QrCodeView;
 
-export interface Invite {
-  token: string;
-  deeplink: string;
-  expires_at: string;
-}
+export type AttendanceItem = Replace<AttendanceEntry, { method: CheckinMethod }>;
 
-export interface ApiErrorBody {
-  error: {
-    code: string;
-    message: string;
-  };
-}
+export type Attendance = Replace<AttendanceView, { items: AttendanceItem[] }>;
 
-export interface AppConfig {
-  event_kinds: { key: string; title: string; default_points: number }[];
-  onboarding_steps: {
-    key: string;
-    type: OnboardingStepType;
-    title: string;
-    event_kind?: string | null;
-  }[];
-  languages: Lang[];
-  university: University;
-}
+export type Invite = InviteView;
+
+export type ApiErrorBody = ErrorBody;
+
+type ConfigStep = Replace<ConfigStepView, { type: OnboardingStepType }>;
+
+export type AppConfig = Replace<
+  AppConfigView,
+  { languages: Lang[]; onboarding_steps: ConfigStep[] }
+>;

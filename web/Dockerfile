@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1
 
+# Build context is web/ (from the repository root: `docker build -t campus-web:local web`).
+# package.json, package-lock.json and Caddyfile are therefore at the context root.
+
 # Node 24 LTS: the version pinned in web/.nvmrc and required by `engines` in package.json.
 FROM node:24-alpine AS build
 WORKDIR /app

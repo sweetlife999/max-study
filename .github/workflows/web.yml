@@ -5,10 +5,14 @@ on:
     branches: [main]
     paths:
       - 'web/**'
+      - 'compose.yaml'
+      - 'docs/openapi.json'
       - '.github/workflows/web.yml'
   pull_request:
     paths:
       - 'web/**'
+      - 'compose.yaml'
+      - 'docs/openapi.json'
       - '.github/workflows/web.yml'
 
 permissions:
@@ -37,6 +41,8 @@ jobs:
 
       - run: npm ci
 
+      - run: npm run api:types:check
+
       - run: npm run lint
 
       - run: npm run typecheck
@@ -51,5 +57,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build the web image
-        run: docker build -t campus-web:ci .
+      - name: Validate Compose and build the web image
+        working-directory: .
+        run: |
+          docker compose config --quiet
+          docker compose build web

@@ -1,5 +1,7 @@
 """Translate MAX updates into domain operations, isolating one transaction per update."""
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from campus.bot.handlers.core import Handler
@@ -8,7 +10,7 @@ from campus.domain.clock import Clock, SystemClock
 from campus.domain.context import DomainConfig
 from campus.domain.errors import DomainError
 from campus.i18n import translator
-from campus.max.client import MaxClient
+from campus.max.client import MaxClient, MaxError, api_error_log_fields
 from campus.max.types import (
     BotStartedUpdate,
     MessageCallbackUpdate,
@@ -16,6 +18,8 @@ from campus.max.types import (
     NewMessageBody,
     Update,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class Dispatcher:
@@ -54,16 +58,68 @@ class Dispatcher:
             return
         if actor is None or actor.is_bot:
             return
-        # Every callback handler sends its response in a separate message. POST /answers with
-        # an empty body is rejected by MAX (400 proto.payload), so it must not gate the action.
+        # Complete the domain transaction before touching the clicked message. Callback replies
+        # are queued by Handler; the old keyboard is cleared before the new one is posted.
         handler: Handler | None = None
+        error_text: str | None = None
         try:
             async with domain_scope(self.session_factory) as session:
                 handler = Handler(session, self.config, self.clock, self.client, actor.user_id)
+                handler.defer_messages = isinstance(update, MessageCallbackUpdate)
                 await handler.handle(update, actor)
         except DomainError as exc:
             lang = handler.lang if handler else self.config.default_language
-            await self.client.send_message(
-                user_id=actor.user_id,
-                body=NewMessageBody(text=translator().error(lang, exc.message_key, **exc.params)),
+            error_text = translator().error(lang, exc.message_key, **exc.params)
+
+        if isinstance(update, MessageCallbackUpdate):
+            await self._finish_callback(
+                update, actor.user_id, handler.pending_messages if handler else [], error_text
             )
+        elif error_text is not None:
+            await self.client.send_message(
+                user_id=actor.user_id, body=NewMessageBody(text=error_text)
+            )
+
+    async def _finish_callback(
+        self,
+        update: MessageCallbackUpdate,
+        user_id: int,
+        pending: list[NewMessageBody],
+        error_text: str | None,
+    ) -> None:
+        # MAX rejects an empty POST /answers body. The explicit empty attachments list removes
+        # stale inline buttons; clearing an expired QR also prevents its code being reused.
+        old_body = NewMessageBody(
+            text=update.message.text or None if update.message else None,
+            attachments=[],
+        )
+        try:
+            await self.client.answer_callback(
+                callback_id=update.callback.callback_id, body=old_body
+            )
+        except MaxError as exc:
+            logger.warning(
+                "callback_clear_failed",
+                extra={"error_type": type(exc).__name__, **api_error_log_fields(exc)},
+            )
+            # A callback can expire before the update is processed. Editing by message ID
+            # still clears the old keyboard when MAX gave us the original message.
+            if update.message and update.message.message_id:
+                try:
+                    await self.client.edit_message(
+                        message_id=update.message.message_id,
+                        body=old_body,
+                        user_id=user_id,
+                    )
+                except MaxError as edit_exc:
+                    logger.warning(
+                        "callback_edit_failed",
+                        extra={
+                            "error_type": type(edit_exc).__name__,
+                            **api_error_log_fields(edit_exc),
+                        },
+                    )
+        for body in pending:
+            await self.client.send_message(user_id=user_id, body=body)
+        if error_text is not None:
+            await self.client.send_message(user_id=user_id, body=NewMessageBody(text=error_text))

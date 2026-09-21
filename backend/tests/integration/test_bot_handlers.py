@@ -69,6 +69,39 @@ async def test_onboarding_manual_completion_and_language(world):
     assert client.last_sent().text == "What would you like to do?"
 
 
+async def test_onboarding_event_steps_offer_matching_events_after_manual_step(world):
+    organizer = await world.organizer()
+    tour = await world.event(organizer=organizer, kind="campus_tour", title="Экскурсия")
+    linked = await world.event(
+        organizer=organizer,
+        kind="volunteering",
+        onboarding_step="campus_tour",
+        title="Зачётная экскурсия",
+    )
+    await world.event(organizer=organizer, kind="club", title="Другой клуб")
+    user = await world.user()
+    handler, client = make_handler(world, user)
+
+    await handler.action(user, "complete:join_group_chat")
+    progress = client.last_sent().body.model_dump_json()
+    assert "step_events:campus_tour" in progress
+    assert "complete:join_group_chat" not in progress
+    assert "menu" in progress
+    assert "отметки на подходящем событии" in client.last_sent().text
+
+    await handler.action(user, "step_events:campus_tour")
+    listing = client.last_sent().body.model_dump_json()
+    assert f"event:{tour.id}" in listing
+    assert f"event:{linked.id}" in listing
+    assert "Другой клуб" not in listing
+
+    await handler.action(user, f"event:{tour.id}")
+    card = client.last_sent().body.model_dump_json()
+    assert '"type":"open_app"' in card
+    assert '"web_app":"campus_bot"' in card
+    assert f'"payload":"ev_{tour.id}"' in card
+
+
 async def test_organizer_qr_start_stop_and_owner_guard(world):
     organizer = await world.organizer()
     event = await world.event(organizer=organizer)

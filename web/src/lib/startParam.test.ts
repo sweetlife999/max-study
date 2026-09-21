@@ -26,11 +26,20 @@ describe('startParamRoute', () => {
   });
 
   it.each([
+    ['ev_1', '/events/1'],
+    ['ev_42', '/events/42'],
+  ])('opens %s on its event card', (startParam, route) => {
+    expect(startParamRoute(startParam)).toBe(route);
+  });
+
+  it.each([
     [null],
     [undefined],
     [''],
     ['org_token'],
-    ['ev_12'],
+    ['ev_0'],
+    ['ev_01'],
+    ['ev_9007199254740992'],
     ['promo_summer2025'],
     ['CI_1_123456'],
   ])('keeps the main screen for %s', (startParam) => {

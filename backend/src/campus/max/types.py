@@ -206,9 +206,9 @@ class LinkButton(_Out):
 class OpenAppButton(_Out):
     """Opens the mini-app.
 
-    UNCONFIRMED: dev.max.ru lists the ``open_app`` button type but does not publish its fields.
-    ``web_app`` / ``contact_id`` / ``payload`` follow the MIT client library
-    github.com/love-apples/maxapi and must be re-checked once MAX documents them.
+    ``web_app`` is the bot's public username or bot link, not the hosted app URL. MAX opens
+    the URL bound to that bot on the partners platform. ``payload`` enters ``start_param``.
+    Source: MAX Bot API OpenAppButton schema at https://dev.max.ru/docs-api.
     """
 
     type: Literal["open_app"] = "open_app"

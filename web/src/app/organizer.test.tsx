@@ -159,12 +159,15 @@ describe('attendance', () => {
   });
 
   it('downloads the CSV and can show it as text when saving is unavailable', async () => {
-    // jsdom has no object URLs, so the download falls back to the on-screen text.
     const { user } = renderApp({ route: `/org/events/${OPEN_EVENT_ID}/attendance` });
 
     await user.click(await screen.findByRole('button', { name: 'Скачать CSV' }));
+    let csv = screen.queryByLabelText<HTMLTextAreaElement>('Скачать CSV');
+    if (!csv) {
+      await user.click(await screen.findByRole('button', { name: 'Показать CSV текстом' }));
+      csv = await screen.findByLabelText<HTMLTextAreaElement>('Скачать CSV');
+    }
 
-    const csv = await screen.findByLabelText<HTMLTextAreaElement>('Скачать CSV');
     expect(csv.value).toContain('user_id,first_name,method,checked_in_at');
     // `Blob.text()` strips the §7 BOM while decoding; the saved blob itself keeps it.
     expect(csv.value).toContain('Анна');

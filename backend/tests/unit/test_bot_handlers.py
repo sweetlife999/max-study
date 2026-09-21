@@ -6,7 +6,13 @@ from campus.bot.dispatcher import Dispatcher
 from campus.db.models import User
 from campus.domain.context import DomainConfig
 from campus.max.fake import FakeMaxClient
-from campus.max.types import BotStartedUpdate, Callback, MessageCallbackUpdate
+from campus.max.types import (
+    BotStartedUpdate,
+    Callback,
+    Message,
+    MessageBody,
+    MessageCallbackUpdate,
+)
 from campus.max.types import User as MaxUser
 
 
@@ -35,7 +41,7 @@ async def test_start_separate_consent_and_persist_payload(setup):
     session.commit.assert_awaited_once()
 
 
-async def test_protected_callback_requires_consent_without_empty_answer(setup):
+async def test_protected_callback_requires_consent_and_clears_old_buttons(setup):
     dispatcher, client, _, user = setup
     with patch("campus.bot.handlers.core.UserService.get_or_create", AsyncMock(return_value=user)):
         await dispatcher.dispatch(
@@ -43,11 +49,11 @@ async def test_protected_callback_requires_consent_without_empty_answer(setup):
                 callback=Callback(callback_id="cb", user=MaxUser(user_id=123), payload="events")
             )
         )
-    assert not client.answered
+    assert client.answered[0][1].to_payload() == {"attachments": []}
     assert "согласие" in client.last_sent().text.lower()
 
 
-async def test_consent_callback_is_processed_without_empty_answer(setup):
+async def test_consent_callback_clears_old_keyboard_before_sending_new_one(setup):
     dispatcher, client, session, user = setup
     with (
         patch("campus.bot.handlers.core.UserService.get_or_create", AsyncMock(return_value=user)),
@@ -55,14 +61,40 @@ async def test_consent_callback_is_processed_without_empty_answer(setup):
     ):
         await dispatcher.dispatch(
             MessageCallbackUpdate(
-                callback=Callback(callback_id="cb", user=MaxUser(user_id=123), payload="consent")
+                callback=Callback(callback_id="cb", user=MaxUser(user_id=123), payload="consent"),
+                message=Message(body=MessageBody(mid="old", text="Data processing consent")),
             )
         )
 
     assert user.consent_at is not None
     assert client.sent
-    assert not client.answered
+    assert client.answered[0][1].to_payload() == {
+        "text": "Data processing consent",
+        "attachments": [],
+    }
+    delivery_calls = [
+        call.method for call in client.calls if call.method in {"answer_callback", "send_message"}
+    ]
+    assert delivery_calls[:2] == ["answer_callback", "send_message"]
+    assert client.last_sent().body.attachments is not None
     session.commit.assert_awaited_once()
+
+
+async def test_callback_uses_edit_fallback_and_still_posts_new_state(setup):
+    from campus.max.client import MaxApiError
+
+    dispatcher, client, _, user = setup
+    user.consent_at = object()
+    client.fail_next("answer_callback", MaxApiError(400, "expired", method="POST /answers"))
+    with patch("campus.bot.handlers.core.UserService.get_or_create", AsyncMock(return_value=user)):
+        await dispatcher.dispatch(
+            MessageCallbackUpdate(
+                callback=Callback(callback_id="cb", user=MaxUser(user_id=123), payload="language"),
+                message=Message(body=MessageBody(mid="old", text="Old menu")),
+            )
+        )
+    assert client.edited["old"].to_payload() == {"text": "Old menu", "attachments": []}
+    assert client.last_sent().body.attachments is not None
 
 
 async def test_invalid_callback_is_localized(setup):

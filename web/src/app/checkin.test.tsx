@@ -133,6 +133,15 @@ describe('automatic check-in from a start_param', () => {
   });
 });
 
+it('opens the event card passed by the chat Open app button', async () => {
+  consent();
+  const onLocation = vi.fn<NonNullable<RenderAppOptions['onLocation']>>();
+  renderApp({ bridgeOptions: { startParam: 'ev_1' }, onLocation });
+
+  expect(await screen.findByText('Открытое заседание студсовета')).toBeInTheDocument();
+  expect(onLocation.mock.calls.map(([location]) => location.pathname)).toContain('/events/1');
+});
+
 describe('manual check-in', () => {
   beforeEach(consent);
 

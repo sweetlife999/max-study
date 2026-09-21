@@ -1,0 +1,89 @@
+name: campus
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://campus:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/campus
+  UNIVERSITY_CONFIG_PATH: /app/config/university.example.yaml
+  MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:?set MAX_BOT_TOKEN}
+  MAX_BOT_USERNAME: ${MAX_BOT_USERNAME:?set MAX_BOT_USERNAME}
+  MAX_API_BASE_URL: https://platform-api2.max.ru
+  PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?set PUBLIC_WEB_URL}
+  ADMIN_MAX_USER_IDS: ${ADMIN_MAX_USER_IDS:-}
+  LOG_LEVEL: INFO
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: campus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: campus
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campus -d campus"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE}
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  seed:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE}
+    command: ["python", "-m", "campus.seed"]
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE}
+    command: ["python", "-m", "campus.api"]
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  bot:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE}
+    command: ["python", "-m", "campus.bot"]
+    environment: *backend-env
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: ${WEB_IMAGE:?set WEB_IMAGE}
+    environment:
+      API_UPSTREAM: api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    ports:
+      - "127.0.0.1:8088:80"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

@@ -289,13 +289,14 @@ async def test_answer_callback_passes_callback_id_and_wraps_the_message() -> Non
     assert json.loads(rec.last.content) == {"message": {"text": "updated"}}
 
 
-async def test_answer_callback_can_acknowledge_without_editing() -> None:
-    rec = Recorder(httpx.Response(200, json={"success": True}))
+async def test_answer_callback_rejects_empty_body() -> None:
+    rec = Recorder()
     client = make_client(rec)
 
-    await client.answer_callback(callback_id="cb-1")
+    with pytest.raises(ValueError, match="requires a message or notification"):
+        await client.answer_callback(callback_id="cb-1")
 
-    assert json.loads(rec.last.content) == {}
+    assert not rec.requests
 
 
 # --- POST /uploads ----------------------------------------------------------------------------

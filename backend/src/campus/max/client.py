@@ -139,7 +139,7 @@ class MaxClient(Protocol):
         body: NewMessageBody | None = None,
         notification: str | None = None,
     ) -> None:
-        """POST /answers?callback_id=... — acknowledge a button press, optionally editing it."""
+        """POST /answers?callback_id=... — send a message edit or notification."""
         ...
 
     async def upload_image(

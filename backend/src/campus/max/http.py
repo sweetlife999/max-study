@@ -333,6 +333,9 @@ class HttpMaxClient:
         # UNCONFIRMED: dev.max.ru documents only `message` in the POST /answers body, while the
         # prose promises "одноразовое уведомление". `notification` follows the MAX client
         # libraries; it is simply omitted when the caller does not ask for one.
+        if body is None and notification is None:
+            msg = "callback answer requires a message or notification"
+            raise ValueError(msg)
         json_body: dict[str, Any] = {}
         if body is not None:
             json_body["message"] = body.to_payload()

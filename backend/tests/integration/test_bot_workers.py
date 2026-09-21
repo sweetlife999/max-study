@@ -4,7 +4,7 @@ import pytest
 
 from campus.bot.workers.outbox import OutboxWorker
 from campus.bot.workers.qr import QrWorker
-from campus.max.client import MaxAuthError, MaxRateLimitError, MaxTransportError
+from campus.max.client import MaxApiError, MaxAuthError, MaxRateLimitError, MaxTransportError
 from campus.max.fake import FakeMaxClient
 from tests.integration.factories import World
 
@@ -61,6 +61,26 @@ async def test_outbox_respects_retry_after(world: World) -> None:
     world.clock.advance(timedelta(seconds=600))
     await worker.tick(world.session)
     assert row.status == "sent"
+
+
+async def test_outbox_failure_logs_max_status_without_response_text(
+    world: World, caplog: pytest.LogCaptureFixture
+) -> None:
+    user = await world.user()
+    row = await world.outbox.enqueue(user_id=user.id, kind="invite_accepted")
+    assert row is not None
+    client = FakeMaxClient()
+    client.fail_next(
+        "send_message", MaxApiError(403, "private", code="chat_not_found", method="POST /messages")
+    )
+
+    await OutboxWorker(client, world.config, world.clock).tick(world.session)
+
+    record = next(record for record in caplog.records if record.message == "outbox_delivery_failed")
+    assert record.__dict__["http_status"] == 403
+    assert record.__dict__["max_method"] == "POST /messages"
+    assert record.__dict__["max_error_code"] == "chat_not_found"
+    assert "private" not in record.__dict__.values()
 
 
 async def test_qr_closed_and_expired_displays_retire(world: World) -> None:

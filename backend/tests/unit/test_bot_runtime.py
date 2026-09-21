@@ -2,10 +2,11 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock
 
+import pytest
 from pydantic import SecretStr
 
 from campus.bot.polling import POLL_RETRY_MAX_DELAY, process_page, retry_delay
-from campus.max.client import MaxRateLimitError, MaxTransportError
+from campus.max.client import MaxApiError, MaxRateLimitError, MaxTransportError
 from campus.max.types import UnknownUpdate, UpdatesPage
 
 
@@ -25,6 +26,20 @@ async def test_batch_isolates_handler_error_and_then_checkpoints() -> None:
         UpdatesPage(updates=(UnknownUpdate(), UnknownUpdate()), marker=123), dispatch, save
     )
     assert calls == ["dispatch", "dispatch", "checkpoint"]
+
+
+async def test_update_failure_logs_safe_max_diagnostics(caplog: pytest.LogCaptureFixture) -> None:
+    async def dispatch(update: object) -> None:
+        raise MaxApiError(400, "private", code="invalid_callback", method="POST /answers")
+
+    await process_page(UpdatesPage(updates=(UnknownUpdate(),), marker=None), dispatch, AsyncMock())
+
+    record = next(record for record in caplog.records if record.message == "update_failed")
+    assert record.__dict__["update_type"] == "unknown"
+    assert record.__dict__["http_status"] == 400
+    assert record.__dict__["max_method"] == "POST /answers"
+    assert record.__dict__["max_error_code"] == "invalid_callback"
+    assert "private" not in record.__dict__.values()
 
 
 async def test_cancelled_batch_does_not_checkpoint() -> None:

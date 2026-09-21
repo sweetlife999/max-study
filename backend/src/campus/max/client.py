@@ -63,6 +63,30 @@ class MaxAuthError(MaxApiError):
         return False
 
 
+_LOGGABLE_METHODS = frozenset(
+    {
+        "GET /me",
+        "GET /updates",
+        "POST /messages",
+        "PUT /messages",
+        "DELETE /messages",
+        "POST /answers",
+        "POST /uploads",
+    }
+)
+
+
+def api_error_log_fields(error: Exception) -> dict[str, int | str | None]:
+    """Expose useful MAX diagnostics without logging response text or upload URLs."""
+    if not isinstance(error, MaxApiError):
+        return {}
+    return {
+        "http_status": error.status_code,
+        "max_method": error.method if error.method in _LOGGABLE_METHODS else "other",
+        "max_error_code": error.code if error.method in _LOGGABLE_METHODS else None,
+    }
+
+
 @runtime_checkable
 class MaxClient(Protocol):
     """The subset of the MAX Bot API this product uses."""

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 
 from campus.config import EventKindStep
 from campus.db.models import Checkin, Event, Rsvp, User
@@ -80,6 +80,23 @@ class EventService(Service):
             select(Event)
             .where(Event.organizer_id == organizer_id)
             .order_by(Event.starts_at.desc(), Event.id.desc())
+        )
+        return await self._fetch(statement, limit)
+
+    async def list_for_onboarding_step(
+        self, step_key: str, *, limit: int | None = None
+    ) -> Sequence[Event]:
+        """Upcoming events that can complete an event-based onboarding step."""
+        step = self.config.university.step(step_key)
+        if not isinstance(step, EventKindStep):
+            raise UnknownOnboardingStepError(f"event step {step_key!r}")
+        statement = (
+            select(Event)
+            .where(
+                Event.ends_at >= self.now(),
+                or_(Event.kind == step.event_kind, Event.onboarding_step == step_key),
+            )
+            .order_by(Event.starts_at, Event.id)
         )
         return await self._fetch(statement, limit)
 

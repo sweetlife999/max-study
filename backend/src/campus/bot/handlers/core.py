@@ -68,6 +68,8 @@ class Handler:
         self.kv = KeyValueService(session, config, clock)
         self.outbox = OutboxService(session, config, clock)
         self.state_key = f"bot_conversation:{max_user_id}"
+        self.defer_messages = False
+        self.pending_messages: list[NewMessageBody] = []
 
     async def state(self) -> dict[str, Any]:
         """Conversation state, or nothing once it has expired.
@@ -100,9 +102,11 @@ class Handler:
             attachments: list[Attachment] | None = (
                 [buttons] if buttons and index == len(chunks) - 1 else None
             )
-            await self.client.send_message(
-                user_id=self.max_user_id, body=NewMessageBody(text=chunk, attachments=attachments)
-            )
+            body = NewMessageBody(text=chunk, attachments=attachments)
+            if self.defer_messages:
+                self.pending_messages.append(body)
+            else:
+                await self.client.send_message(user_id=self.max_user_id, body=body)
 
     async def handle(self, update: Update, actor: MaxUser) -> None:
         locale = getattr(update, "user_locale", None)
@@ -208,11 +212,13 @@ class Handler:
         self.users.require_consent(user)
         await self.protected_action(user, action, arg)
 
-    async def protected_action(self, user: User, action: str, arg: str) -> None:
+    async def protected_action(self, user: User, action: str, arg: str) -> None:  # noqa: PLR0912
         if action == "language":
             await self.languages()
         elif action == "onboarding":
             await self.progress(user)
+        elif action == "step_events":
+            await self.event_list(user, own=False, step_key=arg)
         elif action == "complete":
             await self.onboarding.complete_manual(user, arg)
             await self.progress(user)
@@ -231,9 +237,12 @@ class Handler:
             await self.organizer_action(user, action, self.identifier(arg))
         elif action == "code":
             await self.remember({"mode": "code"})
-            await self.send(self.text("enter_code"))
+            await self.send(self.text("enter_code"), self.menu_return())
         elif action == "choose":
             await self.choose_event(user, self.identifier(arg))
+        elif action == "menu":
+            await self.kv.delete(self.state_key)
+            await self.main_menu(user)
         else:
             await self.main_menu(user)
 
@@ -250,6 +259,7 @@ class Handler:
         # many seconds as the user has steps.
         lines = [self.text("progress", done=progress.done_count, total=progress.total)]
         rows: list[list[Button]] = []
+        has_event_steps = False
         for step in progress.steps:
             status = self.text("done" if step.done else "todo")
             lines.append(
@@ -259,22 +269,41 @@ class Handler:
                 rows.append(
                     [callback(f"{self.text('complete')}: {step.title}", f"complete:{step.key}")]
                 )
-        await self.send("\n\n".join(lines), keyboard(rows) if rows else None)
+            elif step.type == "event_kind" and not step.done:
+                has_event_steps = True
+                rows.append(
+                    [
+                        callback(
+                            f"{self.text('find_events')}: {step.title}",
+                            f"step_events:{step.key}",
+                        )
+                    ]
+                )
+        if has_event_steps:
+            lines.append(self.text("checkin_hint"))
+        rows.append([callback(self.text("back_to_menu"), "menu")])
+        await self.send("\n\n".join(lines), keyboard(rows))
 
-    async def event_list(self, user: User, *, own: bool) -> None:
+    def menu_return(self) -> InlineKeyboardAttachment:
+        return keyboard([[callback(self.text("back_to_menu"), "menu")]])
+
+    async def event_list(self, user: User, *, own: bool, step_key: str | None = None) -> None:
         if own:
             await self.organizers.require_organizer(user)
             events = await self.events.list_for_organizer(user.id, limit=LIST_LIMIT)
+        elif step_key is not None:
+            events = await self.events.list_for_onboarding_step(step_key, limit=LIST_LIMIT)
         else:
             events = await self.events.list_by_scope("upcoming", limit=LIST_LIMIT)
         if not events:
-            await self.send(self.text("no_events"))
+            await self.send(self.text("no_events"), self.menu_return())
             return
         # The batch view costs three queries for the whole list; calling event_card per row
         # would cost three per event and a message per event on top.
         views = await self.events.views(events, viewer=user)
         lines = [self.summary(view) for view in views]
         rows = [[callback(view.title, f"event:{view.id}")] for view in views]
+        rows.append([callback(self.text("back_to_menu"), "menu")])
         await self.send("\n\n".join(lines), keyboard(rows))
 
     def summary(self, view: EventView) -> str:
@@ -329,6 +358,7 @@ class Handler:
                     [callback(self.text("stop"), f"qr_stop:{view.id}")],
                 ]
             )
+        buttons.payload.buttons.append([callback(self.text("back_to_menu"), "menu")])
         await self.send(self.summary(view), buttons)
 
     async def organizer_action(self, user: User, action: str, event_id: int) -> None:
@@ -340,7 +370,7 @@ class Handler:
             await self.send(self.text("qr_started"), qr_stop(self.lang, event_id))
         elif action == "qr_stop":
             await self.displays.stop_for(organizer_id=user.id, event_id=event_id)
-            await self.send(self.text("qr_stopped"))
+            await self.send(self.text("qr_stopped"), self.menu_return())
         else:
             await self.events.update(event, checkin_open=action == "checkin_open")
             await self.event_card(user, event_id)
@@ -367,5 +397,6 @@ class Handler:
                 "already_checked_in" if result.already else "checkin_confirmed",
                 title=result.event.title,
                 points_total=result.points_total,
-            )
+            ),
+            self.menu_return(),
         )

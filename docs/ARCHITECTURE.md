@@ -154,6 +154,7 @@ OpenAPI генерируется FastAPI и публикуется в `docs/open
 ## 9. Mini-app (web)
 Vite + React + TS + `@maxhub/max-ui`; MAX Bridge подключается строго по dev.max.ru/docs/webapps. Роутинг по `start_param`:
 - `ci_<event>_<code>` → сразу `POST /api/checkins` (method `qr`) → экран результата;
+- `ev_<event>` → карточка события;
 - иначе → главный экран.
 
 Экраны студента: согласие → главная (прогресс онбординга + ближайшие события) → событие → сканер (`openCodeReader` с запретом выбора файла; если метод недоступен — поле ввода кода).

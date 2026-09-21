@@ -11,7 +11,7 @@ from campus.domain.clock import Clock
 from campus.domain.context import DomainConfig
 from campus.domain.services import EventService, OutboxService, QrDisplayService, UserService
 from campus.i18n import translator
-from campus.max.client import MaxAuthError, MaxClient, MaxRateLimitError
+from campus.max.client import MaxAuthError, MaxClient, MaxRateLimitError, api_error_log_fields
 from campus.max.types import NewMessageBody
 
 logger = logging.getLogger(__name__)
@@ -80,6 +80,7 @@ class OutboxWorker:
                         "outbox_id": row.id,
                         "kind": row.kind,
                         "attempts": row.attempts,
+                        **api_error_log_fields(exc),
                     },
                 )
             else:

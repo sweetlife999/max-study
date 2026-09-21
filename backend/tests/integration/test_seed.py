@@ -4,7 +4,16 @@ from datetime import timedelta
 
 from sqlalchemy import func, select
 
-from campus.db.models import Checkin, Event, Organizer, OrganizerInvite, Rsvp, User
+from campus.db.models import (
+    Checkin,
+    Event,
+    ManualStepCompletion,
+    Organizer,
+    OrganizerInvite,
+    OutboxMessage,
+    Rsvp,
+    User,
+)
 from campus.domain.services import EventService
 from campus.seed import DEMO_MAX_USER_ID_BASE, seed
 from tests.integration.factories import World
@@ -23,6 +32,43 @@ async def test_seeding_creates_a_populated_campus(world: World) -> None:
     assert report.events > 0
     assert await _count(world, User) == report.users
     assert await _count(world, Organizer) == report.organizers
+
+
+async def test_seeded_manual_progress_does_not_send_messages_to_demo_users(world: World) -> None:
+    await seed(world.session, world.config, world.clock)
+
+    assert await _count(world, ManualStepCompletion) > 0
+    assert await _count(world, OutboxMessage) == 0
+
+
+async def test_reseeding_cancels_pending_notifications_from_old_seed(world: World) -> None:
+    await seed(world.session, world.config, world.clock)
+    student = (
+        await world.session.execute(
+            select(User).where(User.max_user_id == DEMO_MAX_USER_ID_BASE + 2)
+        )
+    ).scalar_one()
+    manual = next(
+        step.key for step in world.config.university.onboarding_steps if step.type == "manual"
+    )
+    old = await world.outbox.enqueue(
+        user_id=student.id,
+        kind="step_completed",
+        payload={"step_key": manual},
+        dedup_key=f"step_completed:{student.id}:{manual}",
+    )
+    reminder = await world.outbox.enqueue(user_id=student.id, kind="reminder")
+    real_user = await world.user()
+    real_notification = await world.outbox.enqueue(user_id=real_user.id, kind="step_completed")
+    assert old is not None
+    assert reminder is not None
+    assert real_notification is not None
+
+    await seed(world.session, world.config, world.clock)
+
+    assert old.status == "cancelled"
+    assert reminder.status == "cancelled"
+    assert real_notification.status == "pending"
 
 
 async def test_seeding_twice_changes_nothing(world: World) -> None:

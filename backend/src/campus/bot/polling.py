@@ -11,7 +11,7 @@ from campus.db.session import session_scope
 from campus.domain.clock import Clock
 from campus.domain.context import DomainConfig
 from campus.domain.services import KeyValueService
-from campus.max.client import MaxAuthError, MaxClient, MaxRateLimitError
+from campus.max.client import MaxAuthError, MaxClient, MaxRateLimitError, api_error_log_fields
 from campus.max.types import Update, UpdatesPage
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,14 @@ async def process_page(page: UpdatesPage, dispatch: Dispatch, checkpoint: Checkp
         try:
             await dispatch(update)
         except Exception as exc:
-            logger.warning("update_failed", extra={"error_type": type(exc).__name__})
+            logger.warning(
+                "update_failed",
+                extra={
+                    "error_type": type(exc).__name__,
+                    "update_type": update.update_type,
+                    **api_error_log_fields(exc),
+                },
+            )
     if page.marker is None:
         # An idle long poll carries no marker. Storing None deletes the checkpoint, and the
         # next GET /updates would replay everything MAX still holds.
@@ -65,5 +72,8 @@ async def poll(
         except MaxAuthError:
             raise
         except Exception as exc:
-            logger.warning("poll_failed", extra={"error_type": type(exc).__name__})
+            logger.warning(
+                "poll_failed",
+                extra={"error_type": type(exc).__name__, **api_error_log_fields(exc)},
+            )
             await asyncio.sleep(retry_delay(exc))

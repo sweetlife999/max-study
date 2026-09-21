@@ -15,21 +15,27 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from campus.config import Settings, load_university_config
-from campus.db.models import Checkin, Event, OrganizerInvite, User
+from campus.db.models import (
+    Checkin,
+    Event,
+    ManualStepCompletion,
+    OrganizerInvite,
+    OutboxMessage,
+    Rsvp,
+    User,
+)
 from campus.db.session import create_engine, create_session_factory, session_scope
 from campus.domain.clock import Clock, SystemClock
 from campus.domain.context import DomainConfig
 from campus.domain.deeplinks import invite_deeplink
 from campus.domain.services import (
     EventService,
-    OnboardingService,
     OrganizerService,
-    RsvpService,
     UserService,
 )
 from campus.domain.views import InviteView
@@ -162,8 +168,6 @@ async def seed(session: AsyncSession, config: DomainConfig, clock: Clock) -> See
     users = UserService(session, config, clock)
     organizers = OrganizerService(session, config, clock)
     events = EventService(session, config, clock)
-    rsvps = RsvpService(session, config, clock)
-    onboarding = OnboardingService(session, config, clock)
 
     staff = await _people(users, ORGANIZER_NAMES, offset=0)
     for person in staff:
@@ -176,8 +180,9 @@ async def seed(session: AsyncSession, config: DomainConfig, clock: Clock) -> See
     ]
 
     checkins = await _attendance(session, timetable, students, clock)
-    rsvp_count = await _interest(rsvps, timetable, students, clock)
-    await _manual_steps(onboarding, config, students)
+    rsvp_count = await _interest(session, timetable, students, clock)
+    await _manual_steps(session, config, students)
+    await _cancel_demo_notifications(session, students)
 
     return SeedReport(
         users=len(staff) + len(students),
@@ -255,7 +260,7 @@ async def _attendance(
 
 
 async def _interest(
-    rsvps: RsvpService, timetable: Sequence[Event], students: Sequence[User], clock: Clock
+    session: AsyncSession, timetable: Sequence[Event], students: Sequence[User], clock: Clock
 ) -> int:
     """Half of the group says it is coming to each event that has not happened yet."""
     coming = students[: len(students) // 2]
@@ -264,20 +269,43 @@ async def _interest(
         if event.starts_at <= clock.now():
             continue
         for student in coming:
-            await rsvps.put(user=student, event=event)
+            await session.execute(
+                pg_insert(Rsvp)
+                .values(user_id=student.id, event_id=event.id)
+                .on_conflict_do_nothing(index_elements=[Rsvp.user_id, Rsvp.event_id])
+            )
             total += 1
     return total
 
 
 async def _manual_steps(
-    onboarding: OnboardingService, config: DomainConfig, students: Sequence[User]
+    session: AsyncSession, config: DomainConfig, students: Sequence[User]
 ) -> None:
     """A few students have already ticked the first manual step, so progress is not all zeros."""
     manual = [step.key for step in config.university.onboarding_steps if step.type == "manual"]
     if not manual:
         return
     for student in students[:MANUAL_STEP_TAKERS]:
-        await onboarding.complete_manual(student, manual[0])
+        await session.execute(
+            pg_insert(ManualStepCompletion)
+            .values(user_id=student.id, step_key=manual[0])
+            .on_conflict_do_nothing(
+                index_elements=[ManualStepCompletion.user_id, ManualStepCompletion.step_key]
+            )
+        )
+
+
+async def _cancel_demo_notifications(session: AsyncSession, students: Sequence[User]) -> None:
+    """Retire messages left by older seed runs before a worker tries synthetic MAX ids."""
+    await session.execute(
+        update(OutboxMessage)
+        .where(
+            OutboxMessage.user_id.in_([student.id for student in students]),
+            OutboxMessage.kind.in_(("step_completed", "reminder")),
+            OutboxMessage.status.in_(("pending", "failed")),
+        )
+        .values(status="cancelled")
+    )
 
 
 async def _invitation(

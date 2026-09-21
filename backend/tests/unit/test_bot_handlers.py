@@ -35,7 +35,7 @@ async def test_start_separate_consent_and_persist_payload(setup):
     session.commit.assert_awaited_once()
 
 
-async def test_protected_callback_requires_consent_and_answers(setup):
+async def test_protected_callback_requires_consent_without_empty_answer(setup):
     dispatcher, client, _, user = setup
     with patch("campus.bot.handlers.core.UserService.get_or_create", AsyncMock(return_value=user)):
         await dispatcher.dispatch(
@@ -43,8 +43,26 @@ async def test_protected_callback_requires_consent_and_answers(setup):
                 callback=Callback(callback_id="cb", user=MaxUser(user_id=123), payload="events")
             )
         )
-    assert len(client.answered) == 1
+    assert not client.answered
     assert "согласие" in client.last_sent().text.lower()
+
+
+async def test_consent_callback_is_processed_without_empty_answer(setup):
+    dispatcher, client, session, user = setup
+    with (
+        patch("campus.bot.handlers.core.UserService.get_or_create", AsyncMock(return_value=user)),
+        patch("campus.bot.handlers.core.Handler.resume", AsyncMock()),
+    ):
+        await dispatcher.dispatch(
+            MessageCallbackUpdate(
+                callback=Callback(callback_id="cb", user=MaxUser(user_id=123), payload="consent")
+            )
+        )
+
+    assert user.consent_at is not None
+    assert client.sent
+    assert not client.answered
+    session.commit.assert_awaited_once()
 
 
 async def test_invalid_callback_is_localized(setup):

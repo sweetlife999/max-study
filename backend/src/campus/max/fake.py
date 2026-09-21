@@ -155,6 +155,9 @@ class FakeMaxClient:
         body: NewMessageBody | None = None,
         notification: str | None = None,
     ) -> None:
+        if body is None and notification is None:
+            msg = "callback answer requires a message or notification"
+            raise ValueError(msg)
         self._record(
             "answer_callback", callback_id=callback_id, body=body, notification=notification
         )

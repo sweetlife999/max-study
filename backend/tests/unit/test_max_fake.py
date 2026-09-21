@@ -78,6 +78,15 @@ async def test_edits_deletes_answers_and_uploads_are_recorded() -> None:
     assert token == client.upload_token
 
 
+async def test_empty_callback_answer_is_rejected() -> None:
+    client = FakeMaxClient()
+
+    with pytest.raises(ValueError, match="requires a message or notification"):
+        await client.answer_callback(callback_id="cb")
+
+    assert not client.answered
+
+
 async def test_calls_can_be_filtered_by_method() -> None:
     client = FakeMaxClient()
     await client.get_me()

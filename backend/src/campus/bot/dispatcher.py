@@ -54,8 +54,8 @@ class Dispatcher:
             return
         if actor is None or actor.is_bot:
             return
-        if isinstance(update, MessageCallbackUpdate):
-            await self.client.answer_callback(callback_id=update.callback.callback_id)
+        # Every callback handler sends its response in a separate message. POST /answers with
+        # an empty body is rejected by MAX (400 proto.payload), so it must not gate the action.
         handler: Handler | None = None
         try:
             async with domain_scope(self.session_factory) as session:

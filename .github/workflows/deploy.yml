@@ -64,8 +64,9 @@ jobs:
           env_file=$(mktemp)
           trap 'rm -f "$ssh_key" "$env_file"' EXIT
           printf '%s\n' "$VPS_SSH_KEY" > "$ssh_key"
-          printf 'POSTGRES_PASSWORD=%s\nMAX_BOT_TOKEN=%s\nMAX_BOT_USERNAME=t200_hakaton_max_bot\nPUBLIC_WEB_URL=https://max.fblrkus.ru\n' \
-            "$POSTGRES_PASSWORD" "$MAX_BOT_TOKEN" > "$env_file"
+          image_prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf 'POSTGRES_PASSWORD=%s\nMAX_BOT_TOKEN=%s\nMAX_BOT_USERNAME=t200_hakaton_max_bot\nPUBLIC_WEB_URL=https://max.fblrkus.ru\nBACKEND_IMAGE=%s-backend:%s\nWEB_IMAGE=%s-web:%s\n' \
+            "$POSTGRES_PASSWORD" "$MAX_BOT_TOKEN" "$image_prefix" "$GITHUB_SHA" "$image_prefix" "$GITHUB_SHA" > "$env_file"
           ssh_opts=(-i "$ssh_key" -o IdentitiesOnly=yes -o UserKnownHostsFile=deploy/known_hosts -o StrictHostKeyChecking=yes)
           target="campus-deploy@$VPS_HOST"
           scp "${ssh_opts[@]}" deploy/compose.prod.yaml "$target:/opt/campus/"
@@ -88,12 +89,14 @@ jobs:
           "${compose[@]}" config --quiet
           "${compose[@]}" pull
           "${compose[@]}" up -d --wait postgres
-          "${compose[@]}" run --rm migrate
-          "${compose[@]}" run --rm seed > "$app_dir/seed.log"
+          "${compose[@]}" run --rm -T migrate </dev/null
+          "${compose[@]}" run --rm -T seed </dev/null > "$app_dir/seed.log"
           "${compose[@]}" up -d --wait api bot web
           curl --fail --silent --show-error http://127.0.0.1:8088/ >/dev/null
           printf '%s\n' "$1" > "$app_dir/deployed-sha"
+          printf '%s\n' "$4" > "$app_dir/deployed-run"
           "${compose[@]}" ps
           REMOTE
           } | ssh "${ssh_opts[@]}" "$target" \
-            "bash -c 'read -r GHCR_TOKEN; export GHCR_TOKEN; exec bash -se -- $GITHUB_SHA $GITHUB_ACTOR $GITHUB_REPOSITORY'"
+            "bash -c 'read -r GHCR_TOKEN; export GHCR_TOKEN; exec bash -se -- $GITHUB_SHA $GITHUB_ACTOR $GITHUB_REPOSITORY $GITHUB_RUN_ID'"
+          ssh "${ssh_opts[@]}" "$target" "test \"\$(cat /opt/campus/deployed-run)\" = '$GITHUB_RUN_ID'"

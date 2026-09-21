@@ -18,7 +18,7 @@
 | `MAX_BOT_TOKEN` | Токен бота MAX для API и бота |
 | `POSTGRES_PASSWORD` | Пароль БД. После первого запуска менять его нужно вместе с паролем роли в Postgres. |
 
-Workflow передаёт настройки через SSH в `/opt/campus/.env` с правами `0600`. `MAX_BOT_USERNAME` и `PUBLIC_WEB_URL` заданы в workflow. При изменении имени бота или домена обновите их там.
+Workflow передаёт настройки и теги образов через SSH в `/opt/campus/.env` с правами `0600`. `MAX_BOT_USERNAME` и `PUBLIC_WEB_URL` заданы в workflow. При изменении имени бота или домена обновите их там.
 
 ## Проверка и обслуживание
 
@@ -28,6 +28,7 @@ cd /opt/campus
 docker compose --env-file .env -f compose.prod.yaml ps
 docker compose --env-file .env -f compose.prod.yaml logs --tail=100 api bot web
 cat deployed-sha
+cat deployed-run
 ```
 
 `seed.log` доступен только пользователю деплоя и содержит приглашение организатора, созданное seed. Деплой повторно выполняет миграции и идемпотентный seed, затем ждёт готовности сервисов. Повторный запуск доступен через `workflow_dispatch` на `main`.

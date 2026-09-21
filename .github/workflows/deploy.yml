@@ -76,8 +76,9 @@ jobs:
           set -euo pipefail
           umask 077
           app_dir=/opt/campus
-          export BACKEND_IMAGE="ghcr.io/${3,,}-backend:$1"
-          export WEB_IMAGE="ghcr.io/${3,,}-web:$1"
+          repository=$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]')
+          export BACKEND_IMAGE="ghcr.io/$repository-backend:$1"
+          export WEB_IMAGE="ghcr.io/$repository-web:$1"
           docker_config=$(mktemp -d)
           trap 'rm -rf "$docker_config"' EXIT
           export DOCKER_CONFIG="$docker_config"

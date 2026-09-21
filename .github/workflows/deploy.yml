@@ -1,0 +1,98 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: campus-production
+  cancel-in-progress: false
+
+jobs:
+  backend:
+    uses: ./.github/workflows/backend.yml
+
+  web:
+    uses: ./.github/workflows/web.yml
+
+  images:
+    name: build and publish images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build and push backend and web
+        run: |
+          image_prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker build -f backend/Dockerfile -t "$image_prefix-backend:$GITHUB_SHA" .
+          docker build -t "$image_prefix-web:$GITHUB_SHA" web
+          docker push "$image_prefix-backend:$GITHUB_SHA"
+          docker push "$image_prefix-web:$GITHUB_SHA"
+
+  production:
+    name: deploy to VPS
+    needs: [backend, web, images]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy configuration and deploy over SSH
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          ssh_key=$(mktemp)
+          env_file=$(mktemp)
+          trap 'rm -f "$ssh_key" "$env_file"' EXIT
+          printf '%s\n' "$VPS_SSH_KEY" > "$ssh_key"
+          printf 'POSTGRES_PASSWORD=%s\nMAX_BOT_TOKEN=%s\nMAX_BOT_USERNAME=t200_hakaton_max_bot\nPUBLIC_WEB_URL=https://max.fblrkus.ru\n' \
+            "$POSTGRES_PASSWORD" "$MAX_BOT_TOKEN" > "$env_file"
+          ssh_opts=(-i "$ssh_key" -o IdentitiesOnly=yes -o UserKnownHostsFile=deploy/known_hosts -o StrictHostKeyChecking=yes)
+          target="campus-deploy@$VPS_HOST"
+          scp "${ssh_opts[@]}" deploy/compose.prod.yaml "$target:/opt/campus/"
+          ssh "${ssh_opts[@]}" "$target" 'umask 077; cat > /opt/campus/.env.next && mv /opt/campus/.env.next /opt/campus/.env' < "$env_file"
+          {
+            printf '%s\n' "$GHCR_TOKEN"
+            cat <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          app_dir=/opt/campus
+          export BACKEND_IMAGE="ghcr.io/${3,,}-backend:$1"
+          export WEB_IMAGE="ghcr.io/${3,,}-web:$1"
+          docker_config=$(mktemp -d)
+          trap 'rm -rf "$docker_config"' EXIT
+          export DOCKER_CONFIG="$docker_config"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$2" --password-stdin >/dev/null
+          unset GHCR_TOKEN
+          compose=(docker compose --env-file "$app_dir/.env" -f "$app_dir/compose.prod.yaml")
+          "${compose[@]}" config --quiet
+          "${compose[@]}" pull
+          "${compose[@]}" up -d --wait postgres
+          "${compose[@]}" run --rm migrate
+          "${compose[@]}" run --rm seed > "$app_dir/seed.log"
+          "${compose[@]}" up -d --wait api bot web
+          curl --fail --silent --show-error http://127.0.0.1:8088/ >/dev/null
+          printf '%s\n' "$1" > "$app_dir/deployed-sha"
+          "${compose[@]}" ps
+          REMOTE
+          } | ssh "${ssh_opts[@]}" "$target" \
+            "bash -c 'read -r GHCR_TOKEN; export GHCR_TOKEN; exec bash -se -- $GITHUB_SHA $GITHUB_ACTOR $GITHUB_REPOSITORY'"

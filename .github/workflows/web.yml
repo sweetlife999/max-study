@@ -1,19 +1,13 @@
 name: web
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'web/**'
-      - 'compose.yaml'
-      - 'docs/openapi.json'
-      - '.github/workflows/web.yml'
   pull_request:
     paths:
       - 'web/**'
       - 'compose.yaml'
       - 'docs/openapi.json'
       - '.github/workflows/web.yml'
+  workflow_call:
 
 permissions:
   contents: read

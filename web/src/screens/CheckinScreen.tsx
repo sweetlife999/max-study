@@ -231,14 +231,16 @@ function ManualCheckin({
             <span className="field__label">{t('checkin.codeLabel')}</span>
             <input
               className="field__control field__control_code"
+              type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={7}
+              maxLength={6}
+              pattern="[0-9]{6}"
               placeholder="000000"
               value={code}
               aria-invalid={codeError}
               onChange={(changeEvent) => {
-                setCode(changeEvent.target.value);
+                setCode(changeEvent.target.value.replace(/[^0-9]/g, '').slice(0, 6));
                 setCodeError(false);
               }}
             />

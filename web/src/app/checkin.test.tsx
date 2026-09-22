@@ -168,6 +168,19 @@ describe('manual check-in', () => {
     expect(mockDb().attempts).toHaveLength(0);
   });
 
+  it('keeps typed and pasted input to six ASCII digits', async () => {
+    const { user } = renderApp({ route: '/checkin' });
+
+    const code = await screen.findByLabelText('Код');
+    await user.type(code, '12a٣456789');
+    expect(code).toHaveValue('124567');
+
+    await user.clear(code);
+    await user.click(code);
+    await user.paste('1234567');
+    expect(code).toHaveValue('123456');
+  });
+
   it('offers manual entry when the scanner is unavailable', async () => {
     renderApp({ route: '/checkin', bridgeOptions: { canScanQr: false } });
 

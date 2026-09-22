@@ -1,5 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react';
-import { http } from 'msw';
+import { http, HttpResponse } from 'msw';
 
 import { apiError } from '../mocks/handlers';
 import { mockDb } from '../mocks/db';
@@ -85,16 +85,58 @@ describe('the main screen', () => {
     expect(screen.getByText('Открытое заседание студсовета')).toBeInTheDocument();
   });
 
-  it('closes a manual step with its button', async () => {
+  it('closes a manual step by tapping its row', async () => {
     const { user } = renderApp();
 
-    const step = await screen.findByLabelText('Отметить шаг «Вступить в чат группы» выполненным');
+    const step = await screen.findByRole('button', { name: /Вступить в чат группы/ });
     await user.click(step);
 
     await waitFor(() => {
       expect(mockDb().manualDone.has('join_group_chat')).toBe(true);
     });
     expect(await screen.findByText('1 из 3')).toBeInTheDocument();
+  });
+
+  it('disables a manual row while completion is pending and does not show a chevron', async () => {
+    let release!: () => void;
+    const completionStarted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post('*/api/onboarding/:key/complete', async () => {
+        await completionStarted;
+        mockDb().manualDone.add('join_group_chat');
+        return HttpResponse.json({
+          key: 'join_group_chat',
+          type: 'manual',
+          title: 'Вступить в чат группы',
+          description: 'Ссылку на чат даёт куратор или староста.',
+          done: true,
+        });
+      }),
+    );
+    const { user } = renderApp();
+
+    const step = await screen.findByRole('button', { name: /Вступить в чат группы/ });
+    expect(step.querySelector('svg')).not.toBeInTheDocument();
+    await user.click(step);
+
+    expect(step).toBeDisabled();
+    release();
+    await waitFor(() => {
+      expect(mockDb().manualDone.has('join_group_chat')).toBe(true);
+    });
+  });
+
+  it('opens matching activities from an event-kind step without completing it', async () => {
+    const { user } = renderApp();
+
+    await user.click(await screen.findByRole('button', { name: /Познакомиться с куратором/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Активности' })).toBeInTheDocument();
+    expect(await screen.findByText('Встреча с куратором группы')).toBeInTheDocument();
+    expect(screen.queryByText('Открытое заседание студсовета')).not.toBeInTheDocument();
+    expect(screen.queryByText('0 из 3')).not.toBeInTheDocument();
   });
 
   it('offers a retry when onboarding fails to load', async () => {

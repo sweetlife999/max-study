@@ -13,6 +13,21 @@ function consent(): void {
 }
 
 describe('consent gate', () => {
+  it('asks for a fresh scan after consenting from a check-in deep link', async () => {
+    const { user } = renderApp({
+      bridgeOptions: { startParam: 'ci_1_000000', canScanQr: true },
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Согласен' }));
+
+    expect(
+      await screen.findByText(/Согласие сохранено.*Отсканируйте QR ещё раз/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Открыть камеру' })).toBeInTheDocument();
+    expect(screen.queryByText('Код устарел')).not.toBeInTheDocument();
+    expect(mockDb().attempts).toHaveLength(0);
+  });
+
   it('blocks every screen until the student agrees', async () => {
     renderApp({ route: '/events' });
 

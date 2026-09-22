@@ -1,5 +1,7 @@
 """Client-side rate limiting, driven by a fake clock so nothing actually waits."""
 
+import asyncio
+
 import pytest
 
 from campus.max.ratelimit import (
@@ -128,6 +130,30 @@ async def test_different_chats_do_not_block_each_other() -> None:
     await limiter.acquire("chat:2")
 
     assert time.slept == []
+
+
+async def test_different_chats_can_acquire_while_one_chat_is_waiting() -> None:
+    time = FakeTime()
+    sleeper_started = asyncio.Event()
+    release_sleeper = asyncio.Event()
+
+    async def controlled_sleep(seconds: float) -> None:
+        assert seconds == pytest.approx(1.0)
+        sleeper_started.set()
+        await release_sleeper.wait()
+        time.now += seconds
+
+    limiter = PerChatLimiter(1.0, monotonic=time.monotonic, sleep=controlled_sleep)
+    await limiter.acquire("chat:1")
+
+    waiting = asyncio.create_task(limiter.acquire("chat:1"))
+    await sleeper_started.wait()
+
+    other_chat = asyncio.create_task(limiter.acquire("chat:2"))
+    await asyncio.wait_for(other_chat, timeout=0.1)
+
+    release_sleeper.set()
+    await waiting
 
 
 async def test_a_chat_is_free_again_after_the_interval() -> None:

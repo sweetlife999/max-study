@@ -70,6 +70,7 @@ class Handler:
         self.state_key = f"bot_conversation:{max_user_id}"
         self.defer_messages = False
         self.pending_messages: list[NewMessageBody] = []
+        self.pending_cancellations: list[str] = []
 
     async def state(self) -> dict[str, Any]:
         """Conversation state, or nothing once it has expired.
@@ -145,11 +146,12 @@ class Handler:
 
     async def start(self, user: User, payload: str | None) -> None:
         await self.remember({"start": (payload or "")[:MAX_START_PAYLOAD]})
-        await self.send(self.text("welcome"))
         if user.consent_at is None:
-            await self.consent()
+            await self.send(
+                f"{self.text('welcome')}\n\n{self.text('consent')}",
+                keyboard([[callback(self.text("agree"), "consent")]]),
+            )
             return
-        await self.languages()
         await self.resume(user)
 
     async def languages(self) -> None:
@@ -172,11 +174,23 @@ class Handler:
             await self.organizers.accept_invite(token=token, user=user)
             # The domain queues the same notification for the outbox. Answering here keeps the
             # chat responsive, so cancel the queued twin rather than send it twice.
-            await self.outbox.cancel([f"invite_accepted:{token}"])
-            await self.send(self.text("invite_accepted"))
+            key = f"invite_accepted:{token}"
+            if self.defer_messages:
+                self.pending_cancellations.append(key)
+            else:
+                await self.outbox.cancel([key])
+            await self.send(
+                f"{self.text('invite_accepted')}\n\n{self.text('menu')}",
+                menu(
+                    self.lang,
+                    organizer=await self.users.is_organizer(user.id),
+                    bot_username=self.config.bot_username,
+                ),
+            )
         elif isinstance(payload, str) and payload.startswith("ev_"):
             await self.event_card(user, self.identifier(payload[3:]))
-        await self.main_menu(user)
+        else:
+            await self.main_menu(user)
 
     async def main_menu(self, user: User) -> None:
         await self.send(
@@ -198,7 +212,6 @@ class Handler:
         action, _, arg = payload.partition(":")
         if action == "consent":
             await self.users.give_consent(user)
-            await self.languages()
             await self.resume(user)
             return
         if action == "lang":
@@ -346,18 +359,31 @@ class Handler:
             ]
         )
         if organizer:
-            buttons.payload.buttons.extend(
+            buttons.payload.buttons.append(
                 [
-                    [
-                        callback(
-                            self.text("close_checkin" if view.checkin_open else "open_checkin"),
-                            f"{'checkin_close' if view.checkin_open else 'checkin_open'}:{view.id}",
-                        )
-                    ],
-                    [callback(self.text("show_qr"), f"qr_start:{view.id}")],
-                    [callback(self.text("stop"), f"qr_stop:{view.id}")],
+                    callback(
+                        self.text("close_checkin" if view.checkin_open else "open_checkin"),
+                        f"{'checkin_close' if view.checkin_open else 'checkin_open'}:{view.id}",
+                    )
                 ]
             )
+            active_display = await self.displays.active_for(organizer_id=user.id, event_id=view.id)
+            if active_display and active_display.active_until <= self.clock.now():
+                active_display = None
+            if active_display:
+                buttons.payload.buttons.append([callback(self.text("stop"), f"qr_stop:{view.id}")])
+            elif view.checkin_open:
+                buttons.payload.buttons.append(
+                    [callback(self.text("show_qr"), f"qr_start:{view.id}")]
+                )
+        buttons.payload.buttons.append(
+            [
+                callback(
+                    self.text("back_to_my_events" if organizer else "back_to_events"),
+                    "my_events" if organizer else "events",
+                )
+            ]
+        )
         buttons.payload.buttons.append([callback(self.text("back_to_menu"), "menu")])
         await self.send(self.summary(view), buttons)
 
@@ -391,7 +417,11 @@ class Handler:
         await self.kv.delete(self.state_key)
         if not result.already:
             # Answered here and by the outbox otherwise; §8 gives the user one confirmation.
-            await self.outbox.cancel([f"checkin_confirmed:{user.id}:{result.event.id}"])
+            key = f"checkin_confirmed:{user.id}:{result.event.id}"
+            if self.defer_messages:
+                self.pending_cancellations.append(key)
+            else:
+                await self.outbox.cancel([key])
         await self.send(
             self.text(
                 "already_checked_in" if result.already else "checkin_confirmed",

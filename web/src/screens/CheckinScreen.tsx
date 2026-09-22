@@ -23,6 +23,7 @@ export function CheckinScreen() {
   const { setPayload } = useCheckinPayload();
   const [searchParams] = useSearchParams();
   const preselectedId = parseId(searchParams.get('event'));
+  const needsFreshScan = searchParams.get('fresh') === '1';
 
   const [scanning, setScanning] = useState(false);
   const [scanNotice, setScanNotice] = useState<ScanNotice>(null);
@@ -65,6 +66,11 @@ export function CheckinScreen() {
   return (
     <Page title={t('checkin.title')} backTo="/">
       <Flex direction="column" gap={20}>
+        {needsFreshScan && (
+          <Typography.Body variant="medium" role="status">
+            {t('checkin.freshAfterConsent')}
+          </Typography.Body>
+        )}
         <section className="panel" aria-labelledby="scan-heading">
           <Flex direction="column" gap={8}>
             <Typography.Title variant="small-strong" asChild>

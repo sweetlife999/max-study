@@ -68,6 +68,7 @@
   "checkin.sending": "Checking you in…",
   "checkin.scanHeading": "Scan a QR code",
   "checkin.scan": "Open the camera",
+  "checkin.freshAfterConsent": "Consent saved. Scan the QR code again: the code may have changed while you read the terms.",
   "checkin.scannerUnavailable": "The scanner is not available in this MAX version — enter the code by hand.",
   "checkin.scannerFailed": "Could not open the scanner. Enter the code by hand.",
   "checkin.notCheckinQr": "This is not a check-in QR code. Scan the code on the organizer's screen.",

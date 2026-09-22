@@ -201,6 +201,11 @@ class EventService(Service):
         for field, value in changes.items():
             setattr(event, field, value)
         await self.session.flush()
+        if "starts_at" in changes:
+            # Local import avoids a cycle: RSVP scheduling already depends on Event.
+            from campus.domain.services.rsvps import RsvpService  # noqa: PLC0415
+
+            await RsvpService(self.session, self.config, self.clock).reschedule_for_event(event)
         return event
 
     # --- validation --------------------------------------------------------------------------

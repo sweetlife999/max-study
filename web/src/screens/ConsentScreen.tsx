@@ -6,7 +6,7 @@ import { InlineError } from '../components/states';
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import { useI18n } from '../i18n/i18n';
 
-export function ConsentScreen({ me }: { me: Me }) {
+export function ConsentScreen({ me, onAccepted }: { me: Me; onAccepted?: () => void }) {
   const { t } = useI18n();
   const consent = useConsentMutation();
 
@@ -45,7 +45,10 @@ export function ConsentScreen({ me }: { me: Me }) {
           stretched
           loading={consent.isPending}
           disabled={consent.isPending}
-          onClick={() => consent.mutate()}
+          onClick={() => {
+            onAccepted?.();
+            consent.mutate();
+          }}
         >
           {t('consent.accept')}
         </Button>

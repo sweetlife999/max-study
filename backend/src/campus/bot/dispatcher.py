@@ -5,10 +5,11 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from campus.bot.handlers.core import Handler
-from campus.db.session import domain_scope
+from campus.db.session import domain_scope, session_scope
 from campus.domain.clock import Clock, SystemClock
 from campus.domain.context import DomainConfig
 from campus.domain.errors import DomainError
+from campus.domain.services.outbox import OutboxService
 from campus.i18n import translator
 from campus.max.client import MaxClient, MaxError, api_error_log_fields
 from campus.max.types import (
@@ -58,14 +59,14 @@ class Dispatcher:
             return
         if actor is None or actor.is_bot:
             return
-        # Complete the domain transaction before touching the clicked message. Callback replies
-        # are queued by Handler; the old keyboard is cleared before the new one is posted.
+        # Complete the domain transaction before sending any reply. A MAX failure must not
+        # roll back a check-in whose update will nevertheless be checkpointed by polling.
         handler: Handler | None = None
         error_text: str | None = None
         try:
             async with domain_scope(self.session_factory) as session:
                 handler = Handler(session, self.config, self.clock, self.client, actor.user_id)
-                handler.defer_messages = isinstance(update, MessageCallbackUpdate)
+                handler.defer_messages = True
                 await handler.handle(update, actor)
         except DomainError as exc:
             lang = handler.lang if handler else self.config.default_language
@@ -75,10 +76,24 @@ class Dispatcher:
             await self._finish_callback(
                 update, actor.user_id, handler.pending_messages if handler else [], error_text
             )
-        elif error_text is not None:
-            await self.client.send_message(
-                user_id=actor.user_id, body=NewMessageBody(text=error_text)
+        else:
+            await self._send_reply(
+                actor.user_id, handler.pending_messages if handler else [], error_text
             )
+        # Keep the queued notification as a fallback until the immediate reply succeeded.
+        if handler and handler.pending_cancellations:
+            async with session_scope(self.session_factory) as session:
+                await OutboxService(session, self.config, self.clock).cancel(
+                    handler.pending_cancellations
+                )
+
+    async def _send_reply(
+        self, user_id: int, pending: list[NewMessageBody], error_text: str | None
+    ) -> None:
+        for body in pending:
+            await self.client.send_message(user_id=user_id, body=body)
+        if error_text is not None:
+            await self.client.send_message(user_id=user_id, body=NewMessageBody(text=error_text))
 
     async def _finish_callback(
         self,

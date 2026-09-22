@@ -26,7 +26,7 @@ def setup(university_config):
     return dispatcher, client, session, user
 
 
-async def test_start_separate_consent_and_persist_payload(setup):
+async def test_start_combines_welcome_and_consent_and_persists_payload(setup):
     dispatcher, client, session, user = setup
     with (
         patch("campus.bot.handlers.core.UserService.get_or_create", AsyncMock(return_value=user)),
@@ -35,8 +35,8 @@ async def test_start_separate_consent_and_persist_payload(setup):
         await dispatcher.dispatch(
             BotStartedUpdate(chat_id=1, user=MaxUser(user_id=123), payload="ev_42")
         )
-    assert len(client.sent) == 2
-    assert "согласие" in client.sent[1].text.lower()
+    assert len(client.sent) == 1
+    assert "согласие" in client.sent[0].text.lower()
     assert "ev_42" in str(save.call_args)
     session.commit.assert_awaited_once()
 
@@ -57,7 +57,7 @@ async def test_consent_callback_clears_old_keyboard_before_sending_new_one(setup
     dispatcher, client, session, user = setup
     with (
         patch("campus.bot.handlers.core.UserService.get_or_create", AsyncMock(return_value=user)),
-        patch("campus.bot.handlers.core.Handler.resume", AsyncMock()),
+        patch("campus.bot.handlers.core.Handler.resume", AsyncMock()) as resume,
     ):
         await dispatcher.dispatch(
             MessageCallbackUpdate(
@@ -67,7 +67,7 @@ async def test_consent_callback_clears_old_keyboard_before_sending_new_one(setup
         )
 
     assert user.consent_at is not None
-    assert client.sent
+    resume.assert_awaited_once()
     assert client.answered[0][1].to_payload() == {
         "text": "Data processing consent",
         "attachments": [],
@@ -75,8 +75,7 @@ async def test_consent_callback_clears_old_keyboard_before_sending_new_one(setup
     delivery_calls = [
         call.method for call in client.calls if call.method in {"answer_callback", "send_message"}
     ]
-    assert delivery_calls[:2] == ["answer_callback", "send_message"]
-    assert client.last_sent().body.attachments is not None
+    assert delivery_calls == ["answer_callback"]
     session.commit.assert_awaited_once()
 
 

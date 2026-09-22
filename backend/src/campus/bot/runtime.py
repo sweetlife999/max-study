@@ -39,6 +39,19 @@ async def work(
         await asyncio.sleep(delay)
 
 
+async def work_outbox(sessions: async_sessionmaker[AsyncSession], worker: OutboxWorker) -> None:
+    while True:
+        delay = 1.0
+        try:
+            await worker.drain(sessions)
+        except MaxAuthError:
+            raise
+        except Exception as exc:
+            logger.warning("worker_failed", extra={"error_type": type(exc).__name__})
+            delay = retry_delay(exc)
+        await asyncio.sleep(delay)
+
+
 async def heartbeat(probe: Callable[[], Awaitable[None]]) -> None:
     """Fail the process when the connection holding singleton ownership is lost."""
     while True:
@@ -88,7 +101,7 @@ async def run(settings: Settings | None = None, *, stop: asyncio.Event | None = 
                     [
                         heartbeat(probe),
                         poll(client, sessions, config, clock, dispatcher.dispatch),
-                        work(sessions, OutboxWorker(client, config, clock).tick),
+                        work_outbox(sessions, OutboxWorker(client, config, clock)),
                         work(sessions, QrWorker(client, config, clock).tick),
                     ],
                     stop,

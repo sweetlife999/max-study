@@ -97,13 +97,12 @@ class PerChatLimiter:
             return
         async with self._lock:
             now = self._monotonic()
-            earliest = self._next_allowed.get(chat_key, now)
-            wait = earliest - now
-            if wait > 0:
-                await self._sleep(wait)
-                now = earliest
-            self._next_allowed[chat_key] = now + self._interval
+            earliest = max(now, self._next_allowed.get(chat_key, now))
+            self._next_allowed[chat_key] = earliest + self._interval
             self._forget_stale(now)
+        wait = earliest - now
+        if wait > 0:
+            await self._sleep(wait)
 
     def _forget_stale(self, now: float) -> None:
         """Drop chats that are free again, so the map cannot grow without bound."""

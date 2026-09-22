@@ -1,5 +1,5 @@
 import { Flex, Typography } from '@maxhub/max-ui';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { isApiError } from '../api/errors';
 import { useMeQuery } from '../api/queries';
@@ -8,6 +8,7 @@ import { ErrorState, LoadingState } from '../components/states';
 import { I18nProvider } from '../i18n/I18nProvider';
 import { resolveLang, useI18n } from '../i18n/i18n';
 import { ConsentScreen } from '../screens/ConsentScreen';
+import { ConsentDuringLaunchContext } from './consentLaunch';
 import { SessionProvider } from './SessionProvider';
 
 /**
@@ -36,12 +37,24 @@ function GateBody({
   query: ReturnType<typeof useMeQuery>;
   children: ReactNode;
 }) {
+  const [consentDuringLaunch, setConsentDuringLaunch] = useState(false);
+
   if (query.isPending) return <LoadingState />;
   if (query.isError) {
     return <SessionError error={query.error} onRetry={() => void query.refetch()} />;
   }
-  if (!query.data.consent) return <ConsentScreen me={query.data} />;
-  return <SessionProvider me={query.data}>{children}</SessionProvider>;
+  if (!query.data.consent) {
+    return (
+      <ConsentDuringLaunchContext.Provider value={consentDuringLaunch}>
+        <ConsentScreen me={query.data} onAccepted={() => setConsentDuringLaunch(true)} />
+      </ConsentDuringLaunchContext.Provider>
+    );
+  }
+  return (
+    <ConsentDuringLaunchContext.Provider value={consentDuringLaunch}>
+      <SessionProvider me={query.data}>{children}</SessionProvider>
+    </ConsentDuringLaunchContext.Provider>
+  );
 }
 
 function SessionError({ error, onRetry }: { error: unknown; onRetry: () => void }) {

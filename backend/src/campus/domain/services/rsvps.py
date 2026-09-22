@@ -72,3 +72,26 @@ class RsvpService(Service):
                 run_at=run_at,
                 dedup_key=reminder_dedup_key(user.id, event.id, offset),
             )
+
+    async def reschedule_for_event(self, event: Event) -> None:
+        """Move pending RSVP reminders when an organizer changes the event start."""
+        result = await self.session.execute(select(Rsvp.user_id).where(Rsvp.event_id == event.id))
+        user_ids = result.scalars().all()
+        now = self.now()
+        for user_id in user_ids:
+            for offset in self.config.university.reminders_before:
+                key = reminder_dedup_key(user_id, event.id, offset)
+                run_at = event.starts_at - offset
+                if run_at <= now:
+                    await self._outbox.cancel([key])
+                else:
+                    await self._outbox.enqueue(
+                        user_id=user_id,
+                        kind=REMINDER_KIND,
+                        payload={
+                            "event_id": event.id,
+                            "offset_seconds": int(offset.total_seconds()),
+                        },
+                        run_at=run_at,
+                        dedup_key=key,
+                    )

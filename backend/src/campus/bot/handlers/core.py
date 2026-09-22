@@ -367,9 +367,7 @@ class Handler:
                     )
                 ]
             )
-            active_display = await self.displays.active_for(
-                organizer_id=user.id, event_id=view.id
-            )
+            active_display = await self.displays.active_for(organizer_id=user.id, event_id=view.id)
             if active_display and active_display.active_until <= self.clock.now():
                 active_display = None
             if active_display:

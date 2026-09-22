@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
 import { useCheckinPayload } from '../app/checkinPayload';
+import { useSession } from '../app/session';
 import { useCheckinMutation, useEventsQuery } from '../api/queries';
 import type { Event } from '../api/types';
 import { useBridge } from '../bridge/context';
@@ -20,6 +21,7 @@ export function CheckinScreen() {
   const { t } = useI18n();
   const bridge = useBridge();
   const navigate = useNavigate();
+  const me = useSession();
   const { setPayload } = useCheckinPayload();
   const [searchParams] = useSearchParams();
   const preselectedId = parseId(searchParams.get('event'));
@@ -72,7 +74,7 @@ export function CheckinScreen() {
           </Typography.Body>
         )}
         <section className="panel" aria-labelledby="scan-heading">
-          <Flex direction="column" gap={8}>
+          <Flex direction="column" gap={8} className="full-width">
             <Typography.Title variant="small-strong" asChild>
               <h2 id="scan-heading">{t('checkin.scanHeading')}</h2>
             </Typography.Title>
@@ -104,7 +106,12 @@ export function CheckinScreen() {
           </Flex>
         </section>
 
-        <ManualCheckin preselectedId={preselectedId} onStart={cancelPendingScan} />
+        <ManualCheckin
+          isOrganizer={me.is_organizer}
+          preselectedId={preselectedId}
+          onStart={cancelPendingScan}
+          onOpenOrganizerTools={() => void navigate('/org')}
+        />
       </Flex>
     </Page>
   );
@@ -128,11 +135,15 @@ function useOpenEvents() {
 }
 
 function ManualCheckin({
+  isOrganizer,
   preselectedId,
   onStart,
+  onOpenOrganizerTools,
 }: {
+  isOrganizer: boolean;
   preselectedId: number | null;
   onStart: () => void;
+  onOpenOrganizerTools: () => void;
 }) {
   const { t } = useI18n();
   const open = useOpenEvents();
@@ -266,13 +277,18 @@ function ManualCheckin({
 
   return (
     <section className="panel" aria-labelledby="manual-heading">
-      <Flex direction="column" gap={8}>
+      <Flex direction="column" gap={8} className="full-width">
         <Typography.Title variant="small-strong" asChild>
           <h2 id="manual-heading">{t('checkin.manualHeading')}</h2>
         </Typography.Title>
         <Typography.Body variant="small" className="muted">
-          {t('checkin.manualHint')}
+          {isOrganizer ? t('checkin.organizerHint') : t('checkin.attendeeHint')}
         </Typography.Body>
+        {isOrganizer && (
+          <Button size="large" variant="secondary" stretched onClick={onOpenOrganizerTools}>
+            {t('checkin.organizerAction')}
+          </Button>
+        )}
         {body}
       </Flex>
     </section>

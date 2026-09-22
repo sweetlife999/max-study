@@ -147,6 +147,45 @@ it('opens the event card passed by the chat Open app button', async () => {
 describe('manual check-in', () => {
   beforeEach(consent);
 
+  it('keeps both check-in panels and their controls in the shared full-width structure', async () => {
+    renderApp({ route: '/checkin', bridgeOptions: { canScanQr: true } });
+
+    const scanPanel = (await screen.findByRole('heading', { name: 'Сканировать QR' })).closest(
+      'section',
+    );
+    const manualPanel = screen.getByRole('heading', { name: 'Ввести код' }).closest('section');
+
+    expect(scanPanel).toHaveClass('panel');
+    expect(scanPanel?.firstElementChild).toHaveClass('full-width');
+    expect(manualPanel).toHaveClass('panel');
+    expect(manualPanel?.firstElementChild).toHaveClass('full-width');
+    expect(screen.getByRole('button', { name: 'Открыть камеру' }).parentElement).toHaveClass(
+      'full-width',
+    );
+  });
+
+  it('offers organizers a path to their event tools', async () => {
+    const { user } = renderApp({ route: '/checkin' });
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Я организатор — показать QR/код' }),
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Мои события' })).toBeInTheDocument();
+  });
+
+  it('keeps the organizer path hidden and explains the attendee flow to non-organizers', async () => {
+    mockDb().me.isOrganizer = false;
+    renderApp({ route: '/checkin' });
+
+    expect(
+      await screen.findByText('Попросите организатора показать QR-код или код из шести цифр.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Я организатор — показать QR/код' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('accepts six digits for the single open event', async () => {
     const { user } = renderApp({ route: '/checkin' });
 

@@ -18,7 +18,15 @@
 | `MAX_BOT_TOKEN` | Токен бота MAX для API и бота |
 | `POSTGRES_PASSWORD` | Пароль БД. После первого запуска менять его нужно вместе с паролем роли в Postgres. |
 
-Workflow передаёт настройки и теги образов через SSH в `/opt/campus/.env` с правами `0600`. `MAX_BOT_USERNAME` и `PUBLIC_WEB_URL` заданы в workflow. При изменении имени бота или домена обновите их там.
+## Переменные GitHub Actions
+
+| Variable | Назначение |
+| --- | --- |
+| `MAX_BOT_USERNAME` | Текущее имя бота MAX, соответствующее `MAX_BOT_TOKEN` |
+
+Перед запуском deploy задайте repository variable `MAX_BOT_USERNAME` в **Settings → Secrets and variables → Actions → Variables**. Workflow завершится с понятной ошибкой, если переменная не задана или содержит перенос строки.
+
+Workflow передаёт настройки и теги образов через SSH в `/opt/campus/.env` с правами `0600`. Значения записываются через аргументы `printf` и stdin SSH, без подстановки имени бота в shell-команду. `PUBLIC_WEB_URL` остаётся заданным в workflow; при изменении домена обновите его там.
 
 ## Проверка и обслуживание
 

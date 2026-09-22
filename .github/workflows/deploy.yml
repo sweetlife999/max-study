@@ -57,16 +57,31 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
+          MAX_BOT_USERNAME: ${{ vars.MAX_BOT_USERNAME }}
         run: |
           set -euo pipefail
           umask 077
+          if [[ -z "$MAX_BOT_USERNAME" ]]; then
+            echo "::error title=Missing repository variable::Set MAX_BOT_USERNAME in the repository Variables before deploying." >&2
+            exit 1
+          fi
+          if [[ "$MAX_BOT_USERNAME" == *$'\n'* || "$MAX_BOT_USERNAME" == *$'\r'* ]]; then
+            echo "::error title=Invalid repository variable::MAX_BOT_USERNAME must be a single line." >&2
+            exit 1
+          fi
           ssh_key=$(mktemp)
           env_file=$(mktemp)
           trap 'rm -f "$ssh_key" "$env_file"' EXIT
           printf '%s\n' "$VPS_SSH_KEY" > "$ssh_key"
           image_prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
-          printf 'POSTGRES_PASSWORD=%s\nMAX_BOT_TOKEN=%s\nMAX_BOT_USERNAME=t200_hakaton_max_bot\nPUBLIC_WEB_URL=https://max.fblrkus.ru\nBACKEND_IMAGE=%s-backend:%s\nWEB_IMAGE=%s-web:%s\n' \
-            "$POSTGRES_PASSWORD" "$MAX_BOT_TOKEN" "$image_prefix" "$GITHUB_SHA" "$image_prefix" "$GITHUB_SHA" > "$env_file"
+          {
+            printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
+            printf 'MAX_BOT_TOKEN=%s\n' "$MAX_BOT_TOKEN"
+            printf 'MAX_BOT_USERNAME=%s\n' "$MAX_BOT_USERNAME"
+            printf 'PUBLIC_WEB_URL=https://max.fblrkus.ru\n'
+            printf 'BACKEND_IMAGE=%s-backend:%s\n' "$image_prefix" "$GITHUB_SHA"
+            printf 'WEB_IMAGE=%s-web:%s\n' "$image_prefix" "$GITHUB_SHA"
+          } > "$env_file"
           ssh_opts=(-i "$ssh_key" -o IdentitiesOnly=yes -o UserKnownHostsFile=deploy/known_hosts -o StrictHostKeyChecking=yes)
           target="campus-deploy@$VPS_HOST"
           scp "${ssh_opts[@]}" deploy/compose.prod.yaml "$target:/opt/campus/"

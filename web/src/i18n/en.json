@@ -34,7 +34,7 @@
   "onboarding.progress": "{done} of {total}",
   "onboarding.empty": "No steps yet",
   "onboarding.done": "done",
-  "onboarding.eventHint": "Closes once you check in at a matching activity.",
+  "onboarding.eventHint": "Tap to see matching activities. The step closes after you check in with the QR or code.",
   "onboarding.markDone": "Done",
   "onboarding.markDoneFor": "Mark the step “{title}” as done",
 
@@ -44,6 +44,7 @@
   "events.past": "Past",
   "events.emptyUpcoming": "No upcoming activities yet",
   "events.emptyPast": "No past activities yet",
+  "events.emptyMatching": "No matching activities yet",
 
   "event.title": "Activity",
   "event.when": "When",
@@ -73,7 +74,7 @@
   "checkin.scannerFailed": "Could not open the scanner. Enter the code by hand.",
   "checkin.notCheckinQr": "This is not a check-in QR code. Scan the code on the organizer's screen.",
   "checkin.manualHeading": "Enter a code",
-  "checkin.manualHint": "Six digits from the organizer's screen. The code changes every few seconds.",
+  "checkin.manualHint": "The organizer opens the activity, turns on check-in, and displays a rotating QR code and six-digit code. Scan the QR or enter those six digits.",
   "checkin.eventLabel": "Activity",
   "checkin.eventPlaceholder": "Pick an activity",
   "checkin.eventRequired": "Pick an activity",
@@ -118,7 +119,7 @@
   "org.manageTitle": "Manage the event",
   "org.edit": "Edit",
   "org.checkinOpen": "Check-in open",
-  "org.checkinOpenHint": "While this is on, students can check in with the code from your screen.",
+  "org.checkinOpenHint": "Turn this on before starting and show students the QR screen: the code and six digits refresh automatically.",
   "org.showQr": "Show the QR code",
   "org.attendance": "Attendance",
   "org.createTitle": "New event",
@@ -150,7 +151,7 @@
   "org.qrClosed": "Check-in is closed",
   "org.qrClosedHint": "Turn on “Check-in open” to show the QR code.",
   "org.qrOpenCheckin": "Open check-in",
-  "org.qrHint": "Show this screen to the students: the code refreshes automatically.",
+  "org.qrHint": "Show this screen to students. They can scan the QR or enter the six digits; the code refreshes automatically.",
   "org.qrStale": "The code could not be refreshed and may be stale. Refresh it by hand.",
 
   "org.attendanceTitle": "Attendance",

@@ -18,7 +18,7 @@ export function HomeScreen() {
 
   return (
     <Page title={t('home.title', { name: me.first_name })}>
-      <Flex direction="column" gap={16}>
+      <Flex direction="column" gap={16} className="page-sections">
         <Flex gap={8} wrap="wrap" className="actions">
           <Button size="large" onClick={() => void navigate('/checkin')}>
             {t('home.checkin')}
@@ -29,7 +29,11 @@ export function HomeScreen() {
         </Flex>
 
         {(me.is_organizer || me.is_admin) && (
-          <CellList mode="island" header={<CellHeader>{t('home.manageHeader')}</CellHeader>}>
+          <CellList
+            className="full-width"
+            mode="island"
+            header={<CellHeader>{t('home.manageHeader')}</CellHeader>}
+          >
             {me.is_organizer && (
               <CellSimple
                 as="button"
@@ -65,6 +69,7 @@ function OnboardingSection() {
       <QueryState query={query}>
         {(onboarding) => (
           <CellList
+            className="full-width"
             mode="island"
             header={
               <CellHeader
@@ -103,11 +108,29 @@ function OnboardingSection() {
 
 function StepCell({ step }: { step: Step }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const complete = useCompleteStepMutation();
-  const canComplete = step.type === 'manual' && !step.done;
+  const interactive = !step.done;
+  const isManual = step.type === 'manual';
+  const isPending = isManual && complete.isPending;
+
+  const activate = () => {
+    if (isManual) {
+      complete.mutate(step.key);
+      return;
+    }
+    if (step.event_kind) {
+      void navigate(`/events?kind=${encodeURIComponent(step.event_kind)}`);
+    }
+  };
 
   return (
     <CellSimple
+      as={interactive ? 'button' : undefined}
+      disabled={isPending}
+      showChevron={interactive && !isManual}
+      className={interactive ? 'step-row' : undefined}
+      onClick={interactive ? activate : undefined}
       before={
         <span className={step.done ? 'step-mark step-mark_done' : 'step-mark'} aria-hidden>
           {step.done ? '✓' : ''}
@@ -125,17 +148,8 @@ function StepCell({ step }: { step: Step }) {
         </>
       }
       after={
-        canComplete ? (
-          <Button
-            size="small"
-            variant="secondary"
-            loading={complete.isPending}
-            disabled={complete.isPending}
-            onClick={() => complete.mutate(step.key)}
-            aria-label={t('onboarding.markDoneFor', { title: step.title })}
-          >
-            {t('onboarding.markDone')}
-          </Button>
+        step.type === 'manual' && interactive ? (
+          <span className="step-action">{t('onboarding.markDone')}</span>
         ) : undefined
       }
     />
@@ -150,6 +164,7 @@ function UpcomingSection() {
   return (
     <section aria-labelledby="upcoming-heading">
       <CellList
+        className="full-width"
         mode="island"
         header={
           <CellHeader

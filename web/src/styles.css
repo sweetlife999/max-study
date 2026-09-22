@@ -29,6 +29,17 @@ body {
   padding-inline: var(--page-gutter);
 }
 
+.page > * {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.page-sections > * {
+  width: 100%;
+  min-width: 0;
+}
+
 .page__header {
   margin-bottom: 12px;
   min-height: 40px;
@@ -99,6 +110,17 @@ body {
 
 .step-hint {
   color: var(--text-secondary, GrayText);
+}
+
+.step-action {
+  color: var(--icon-themed, #2d6cdf);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.full-width {
+  width: 100%;
+  min-width: 0;
 }
 
 /* Forms ------------------------------------------------------------------ */

@@ -12,6 +12,7 @@ export function EventsScreen() {
   const { t } = useI18n();
   const [params, setParams] = useSearchParams();
   const scope: EventScope = params.get('scope') === 'past' ? 'past' : 'upcoming';
+  const kind = params.get('kind');
   const query = useEventsQuery(scope);
 
   const tab = (value: EventScope, label: string) => (
@@ -33,19 +34,26 @@ export function EventsScreen() {
           {tab('past', t('events.past'))}
         </Flex>
         <QueryState query={query}>
-          {({ items }) =>
-            items.length === 0 ? (
+          {({ items }) => {
+            const filtered = kind ? items.filter((event) => event.kind === kind) : items;
+            return filtered.length === 0 ? (
               <EmptyState
-                title={scope === 'past' ? t('events.emptyPast') : t('events.emptyUpcoming')}
+                title={
+                  kind
+                    ? t('events.emptyMatching')
+                    : scope === 'past'
+                      ? t('events.emptyPast')
+                      : t('events.emptyUpcoming')
+                }
               />
             ) : (
               <CellList mode="island">
-                {items.map((event) => (
+                {filtered.map((event) => (
                   <EventCell key={event.id} event={event} to={`/events/${event.id}`} />
                 ))}
               </CellList>
-            )
-          }
+            );
+          }}
         </QueryState>
       </Flex>
     </Page>

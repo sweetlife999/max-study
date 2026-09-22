@@ -3,10 +3,11 @@
 import logging
 from zoneinfo import ZoneInfo
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from campus.bot.workers.qr import QrWorker
 from campus.db.models import OutboxMessage
+from campus.db.session import session_scope
 from campus.domain.clock import Clock
 from campus.domain.context import DomainConfig
 from campus.domain.services import EventService, OutboxService, QrDisplayService, UserService
@@ -56,9 +57,10 @@ class OutboxWorker:
             user_id=user.max_user_id, body=NewMessageBody(text=text[:4000])
         )
 
-    async def tick(self, session: AsyncSession) -> None:
+    async def tick(self, session: AsyncSession, *, limit: int = 20) -> int:
         outbox = OutboxService(session, self.config, self.clock)
-        for row in await outbox.claim():
+        rows = await outbox.claim(limit=limit)
+        for row in rows:
             try:
                 await self.deliver(session, row)
             except MaxAuthError:
@@ -85,3 +87,12 @@ class OutboxWorker:
                 )
             else:
                 await outbox.mark_sent(row)
+        return len(rows)
+
+    async def drain(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        """Commit each delivery independently, including its retry state."""
+        for _ in range(20):
+            async with session_scope(sessions) as session:
+                processed = await self.tick(session, limit=1)
+            if not processed:
+                break

@@ -152,13 +152,19 @@ def parse_update(raw: Mapping[str, Any]) -> Update:
     raises: an event we cannot parse is still an event we must skip past.
     """
     update_type = raw.get("update_type")
+
+    # The fallback must not validate fields copied from the broken event: an invalid
+    # timestamp would make UnknownUpdate fail too and poison every subsequent poll.
+    def unknown() -> UnknownUpdate:
+        return UnknownUpdate(update_type=update_type if isinstance(update_type, str) else "unknown")
+
     model = _UPDATE_MODELS.get(update_type) if isinstance(update_type, str) else None
     if model is None:
-        return UnknownUpdate.model_validate({**raw, "update_type": update_type or "unknown"})
+        return unknown()
     try:
         return model.model_validate(raw)  # pyright: ignore[reportReturnType]
     except ValueError:
-        return UnknownUpdate.model_validate({**raw, "update_type": update_type})
+        return unknown()
 
 
 class UpdatesPage(_In):

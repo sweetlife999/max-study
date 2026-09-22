@@ -4,12 +4,22 @@ from datetime import timedelta
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from campus.bot.dispatcher import Dispatcher
 from campus.bot.handlers.core import Handler
-from campus.db.models import OutboxMessage
+from campus.db.models import Checkin, OutboxMessage
 from campus.domain.errors import NotEventOwnerError, TooManyAttemptsError
+from campus.max.client import MaxTransportError
 from campus.max.fake import FakeMaxClient
-from campus.max.types import BotStartedUpdate, Callback, MessageCallbackUpdate
+from campus.max.types import (
+    BotStartedUpdate,
+    Callback,
+    Message,
+    MessageBody,
+    MessageCallbackUpdate,
+    MessageCreatedUpdate,
+)
 from campus.max.types import User as MaxUser
 
 
@@ -117,6 +127,24 @@ async def test_organizer_qr_start_stop_and_owner_guard(world):
     assert await world.qr_displays.active_for(organizer_id=organizer.id, event_id=event.id) is None
     await handler.action(organizer, f"checkin_close:{event.id}")
     assert not event.checkin_open
+
+
+async def test_expired_qr_display_card_offers_start_again(world):
+    organizer = await world.organizer()
+    event = await world.event(organizer=organizer, checkin_open=True)
+    await world.qr_displays.start(
+        event=event,
+        organizer=organizer,
+        max_user_id=organizer.max_user_id,
+        active_until=world.clock.now() - timedelta(seconds=1),
+    )
+    handler, client = make_handler(world, organizer)
+
+    await handler.action(organizer, f"event:{event.id}")
+
+    payload = client.last_sent().body.model_dump_json()
+    assert f"qr_start:{event.id}" in payload
+    assert f"qr_stop:{event.id}" not in payload
 
 
 async def test_manual_code_and_repeat_are_idempotent(world):
@@ -271,6 +299,72 @@ async def test_a_chat_checkin_is_confirmed_once(world):
     # never sent from here and is still the outbox's to deliver.
     assert "checkin_confirmed" not in pending
     assert "step_completed" in pending
+
+
+async def test_chat_send_failure_keeps_checkin_and_fallback_confirmation(world):
+    organizer = await world.organizer()
+    event = await world.event(organizer=organizer, checkin_open=True, starts_in=timedelta())
+    user = await world.user()
+    handler, _ = make_handler(world, user)
+    await handler.remember({"mode": "code"})
+    actor = MaxUser(user_id=user.max_user_id)
+    update = MessageCreatedUpdate(
+        message=Message(
+            sender=actor,
+            body=MessageBody(mid="code-message", text=world.code_for(event)),
+        )
+    )
+    client = FakeMaxClient()
+    client.fail_next("send_message", MaxTransportError("network unavailable"))
+    sessions = async_sessionmaker(
+        bind=world.session.bind,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
+
+    with pytest.raises(MaxTransportError):
+        await Dispatcher(world.config, client, sessions, clock=world.clock).dispatch(update)
+
+    checked_in = await world.session.scalar(
+        select(Checkin).where(Checkin.user_id == user.id, Checkin.event_id == event.id)
+    )
+    confirmation = await world.session.scalar(
+        select(OutboxMessage).where(
+            OutboxMessage.dedup_key == f"checkin_confirmed:{user.id}:{event.id}"
+        )
+    )
+    assert checked_in is not None
+    assert confirmation is not None
+    assert confirmation.status == "pending"
+
+
+async def test_chat_success_cancels_fallback_confirmation(world):
+    organizer = await world.organizer()
+    event = await world.event(organizer=organizer, checkin_open=True, starts_in=timedelta())
+    user = await world.user()
+    handler, _ = make_handler(world, user)
+    await handler.remember({"mode": "code"})
+    actor = MaxUser(user_id=user.max_user_id)
+    update = MessageCreatedUpdate(
+        message=Message(sender=actor, body=MessageBody(mid="code", text=world.code_for(event)))
+    )
+    client = FakeMaxClient()
+    sessions = async_sessionmaker(
+        bind=world.session.bind,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
+
+    await Dispatcher(world.config, client, sessions, clock=world.clock).dispatch(update)
+
+    confirmation = await world.session.scalar(
+        select(OutboxMessage)
+        .where(OutboxMessage.dedup_key == f"checkin_confirmed:{user.id}:{event.id}")
+        .execution_options(populate_existing=True)
+    )
+    assert confirmation is not None
+    assert confirmation.status == "cancelled"
+    assert any("подтверждена" in message.text for message in client.sent)
 
 
 async def test_expired_conversation_state_is_forgotten(world):

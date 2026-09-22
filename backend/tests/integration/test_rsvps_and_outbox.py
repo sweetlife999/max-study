@@ -121,6 +121,41 @@ async def test_repeating_the_rsvp_reschedules_rather_than_piles_up(world: World)
     )
 
 
+async def test_editing_event_reschedules_reminders_without_a_new_rsvp(world: World) -> None:
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.event(organizer=organizer, starts_in=timedelta(days=3))
+    await world.rsvps.put(user=student, event=event)
+
+    await world.events.update(
+        event,
+        starts_at=event.starts_at + timedelta(days=1),
+        ends_at=event.ends_at + timedelta(days=1),
+    )
+
+    queued = await _messages(world, student.id)
+    assert [message.run_at for message in queued] == sorted(
+        event.starts_at - offset for offset in world.config.university.reminders_before
+    )
+
+
+async def test_moving_event_nearby_cancels_reminders_whose_time_has_passed(world: World) -> None:
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.event(organizer=organizer, starts_in=timedelta(days=3))
+    await world.rsvps.put(user=student, event=event)
+
+    await world.events.update(
+        event,
+        starts_at=world.clock.now() + timedelta(hours=2),
+        ends_at=world.clock.now() + timedelta(hours=4),
+    )
+
+    pending = [row for row in await _messages(world, student.id) if row.status == "pending"]
+    assert len(pending) == 1
+    assert pending[0].run_at == event.starts_at - timedelta(hours=1)
+
+
 async def test_cancelling_the_rsvp_cancels_the_reminders(world: World) -> None:
     organizer = await world.organizer()
     student = await world.user()

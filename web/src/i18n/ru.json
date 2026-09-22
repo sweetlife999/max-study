@@ -68,6 +68,7 @@
   "checkin.sending": "Отмечаем вас…",
   "checkin.scanHeading": "Сканировать QR",
   "checkin.scan": "Открыть камеру",
+  "checkin.freshAfterConsent": "Согласие сохранено. Отсканируйте QR ещё раз: код мог обновиться, пока вы читали условия.",
   "checkin.scannerUnavailable": "Сканер недоступен в этой версии MAX — введите код вручную.",
   "checkin.scannerFailed": "Не удалось открыть сканер. Введите код вручную.",
   "checkin.notCheckinQr": "Это не QR-код отметки. Отсканируйте код с экрана организатора.",

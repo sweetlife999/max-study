@@ -1,9 +1,12 @@
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from campus.bot.workers.outbox import OutboxWorker
 from campus.bot.workers.qr import QrWorker
+from campus.db.models import OutboxMessage
 from campus.max.client import MaxApiError, MaxAuthError, MaxRateLimitError, MaxTransportError
 from campus.max.fake import FakeMaxClient
 from tests.integration.factories import World
@@ -61,6 +64,51 @@ async def test_outbox_respects_retry_after(world: World) -> None:
     world.clock.advance(timedelta(seconds=600))
     await worker.tick(world.session)
     assert row.status == "sent"
+
+
+async def test_outbox_commits_each_delivery_before_later_auth_failure(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await world.user()
+    first = await world.outbox.enqueue(user_id=user.id, kind="invite_accepted")
+    second = await world.outbox.enqueue(user_id=user.id, kind="invite_accepted")
+    assert first is not None
+    assert second is not None
+    client = FakeMaxClient()
+    original_send = client.send_message
+    calls = 0
+
+    async def fail_second(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise MaxAuthError("token revoked")
+        return await original_send(**kwargs)
+
+    monkeypatch.setattr(client, "send_message", fail_second)
+    sessions = async_sessionmaker(
+        bind=world.session.bind,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
+
+    with pytest.raises(MaxAuthError):
+        await OutboxWorker(client, world.config, world.clock).drain(sessions)
+
+    rows = (
+        (
+            await world.session.execute(
+                select(OutboxMessage)
+                .where(OutboxMessage.id.in_([first.id, second.id]))
+                .order_by(OutboxMessage.id)
+                .execution_options(populate_existing=True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [row.status for row in rows] == ["sent", "pending"]
+    assert len(client.sent) == 1
 
 
 async def test_outbox_failure_logs_max_status_without_response_text(

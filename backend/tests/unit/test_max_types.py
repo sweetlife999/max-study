@@ -96,6 +96,22 @@ def test_malformed_known_event_becomes_unknown_update_instead_of_raising() -> No
     assert isinstance(update, UnknownUpdate)
 
 
+def test_malformed_timestamp_does_not_poison_polling_page() -> None:
+    page = UpdatesPage.from_payload(
+        {
+            "updates": [
+                {"update_type": "message_created", "timestamp": "bad", "message": {}},
+                {"update_type": "bot_started", "chat_id": 1, "user": {"user_id": 2}},
+            ],
+            "marker": 42,
+        }
+    )
+
+    assert isinstance(page.updates[0], UnknownUpdate)
+    assert isinstance(page.updates[1], BotStartedUpdate)
+    assert page.marker == 42
+
+
 def test_event_without_a_type_becomes_unknown_update() -> None:
     assert isinstance(parse_update({"timestamp": 1}), UnknownUpdate)
 

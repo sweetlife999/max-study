@@ -1,0 +1,59 @@
+name: diagnose QR delivery
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect QR delivery on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          ssh_key=$(mktemp)
+          trap 'rm -f "$ssh_key"' EXIT
+          printf '%s\n' "$VPS_SSH_KEY" > "$ssh_key"
+          ssh_opts=(-i "$ssh_key" -o IdentitiesOnly=yes -o UserKnownHostsFile=deploy/known_hosts -o StrictHostKeyChecking=yes)
+          target="campus-deploy@$VPS_HOST"
+          ssh "${ssh_opts[@]}" "$target" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          app_dir=/opt/campus
+          compose=(docker compose --env-file "$app_dir/.env" -f "$app_dir/compose.prod.yaml")
+
+          echo 'Container status:'
+          "${compose[@]}" ps api bot postgres
+
+          echo 'Recent QR delivery errors:'
+          "${compose[@]}" logs --since 6h --tail 1000 bot 2>&1 \
+            | grep -E 'qr_render_failed|outbox_delivery_failed|worker_failed' \
+            | tail -100 || true
+
+          echo 'Recent QR outbox rows:'
+          "${compose[@]}" exec -T postgres psql -X -v ON_ERROR_STOP=1 -U campus -d campus <<'SQL'
+          SELECT id, status, attempts, last_error, run_at, created_at,
+                 payload->>'event_id' AS event_id,
+                 payload->>'qr_display_id' AS qr_display_id
+          FROM outbox
+          WHERE kind = 'qr_display_start'
+          ORDER BY id DESC
+          LIMIT 10;
+
+          SELECT id, event_id,
+                 max_chat_id IS NOT NULL AS has_chat_destination,
+                 max_user_id IS NOT NULL AS has_user_destination,
+                 message_id IS NOT NULL AS has_message,
+                 last_rendered_window, active_until, stopped_at, created_at
+          FROM qr_displays
+          ORDER BY id DESC
+          LIMIT 10;
+          SQL
+          REMOTE

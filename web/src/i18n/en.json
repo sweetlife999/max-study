@@ -153,7 +153,6 @@
   "org.qrExpiresIn": "Refreshes in {seconds} s",
   "org.qrCheckedIn": "Checked in: {count}",
   "org.qrSendToChat": "Show the QR in the chat",
-  "org.qrSentToChat": "The QR code was sent to the bot chat",
   "org.qrClosed": "Check-in is closed",
   "org.qrClosedHint": "Turn on “Check-in open” to show the QR code.",
   "org.qrOpenCheckin": "Open check-in",

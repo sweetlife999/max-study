@@ -24,6 +24,8 @@ export interface Bridge {
   readonly canScanQr: boolean;
 
   ready(): void;
+  /** Closes the miniapp when supported; never throws. */
+  close(): void;
   scanQr(): Promise<ScanOutcome>;
   /** Shows the native Back button bound to `handler`; the returned function removes it. */
   showBackButton(handler: () => void): () => void;
@@ -100,6 +102,15 @@ export function createMaxBridge(webApp: WebApp | undefined, search: string): Bri
         webApp?.ready?.();
       } catch {
         // The app works without the ready signal.
+      }
+    },
+
+    close() {
+      if (!isInMax) return;
+      try {
+        webApp?.close?.();
+      } catch {
+        // Closing is best-effort; the app remains usable if the client rejects it.
       }
     },
 

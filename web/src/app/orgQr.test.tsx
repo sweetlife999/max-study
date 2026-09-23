@@ -107,7 +107,10 @@ describe('the full-screen QR', () => {
 
   it('stops counter polling after an error and resumes after explicit retry', async () => {
     qrEndpoint();
-    const { user } = renderApp({ route: `/org/events/${OPEN_EVENT_ID}/qr`, fakeTimers: true });
+    const { user } = renderApp({
+      route: `/org/events/${OPEN_EVENT_ID}/qr`,
+      fakeTimers: true,
+    });
     await screen.findByLabelText('Код');
     let calls = 0;
     server.use(
@@ -248,21 +251,52 @@ describe('the full-screen QR', () => {
 
   it('sends the QR to the bot chat on request', async () => {
     qrEndpoint();
+    const calls: string[] = [];
     let chatCalls = 0;
     server.use(
       http.post(`*/api/org/events/${OPEN_EVENT_ID}/qr/chat`, () => {
         chatCalls += 1;
+        calls.push('post');
         return new HttpResponse(null, { status: 202 });
       }),
     );
-    const { user } = renderApp({ route: `/org/events/${OPEN_EVENT_ID}/qr`, fakeTimers: true });
+    const { bridge, user } = renderApp({
+      route: `/org/events/${OPEN_EVENT_ID}/qr`,
+      fakeTimers: true,
+    });
+    const close = vi.spyOn(bridge, 'close').mockImplementation(() => {
+      calls.push('close');
+      bridge.closeCalls += 1;
+    });
 
     await user.click(await screen.findByRole('button', { name: 'Показать QR в чате' }));
 
     await waitFor(() => {
       expect(chatCalls).toBe(1);
     });
-    expect(await screen.findByText('QR отправлен в чат с ботом')).toBeInTheDocument();
+    expect(calls).toEqual(['post', 'close']);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(bridge.closeCalls).toBe(1);
+    expect(screen.queryByText('QR отправлен в чат с ботом')).not.toBeInTheDocument();
+  });
+
+  it('stays open and shows an inline error when sending to the chat fails', async () => {
+    qrEndpoint();
+    server.use(
+      http.post(
+        `*/api/org/events/${OPEN_EVENT_ID}/qr/chat`,
+        () => new HttpResponse(null, { status: 503 }),
+      ),
+    );
+    const { bridge, user } = renderApp({
+      route: `/org/events/${OPEN_EVENT_ID}/qr`,
+      fakeTimers: true,
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Показать QR в чате' }));
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(bridge.closeCalls).toBe(0);
   });
 
   it('asks the client for maximum screen brightness while the QR is visible', async () => {

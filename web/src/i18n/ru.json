@@ -153,7 +153,6 @@
   "org.qrExpiresIn": "Обновится через {seconds} с",
   "org.qrCheckedIn": "Отметились: {count}",
   "org.qrSendToChat": "Показать QR в чате",
-  "org.qrSentToChat": "QR отправлен в чат с ботом",
   "org.qrClosed": "Отметка закрыта",
   "org.qrClosedHint": "Включите «Отметка открыта», чтобы показать QR-код.",
   "org.qrOpenCheckin": "Открыть отметку",

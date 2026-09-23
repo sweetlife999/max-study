@@ -53,7 +53,10 @@ describe('creating an event', () => {
 
     expect(form).toHaveClass('event-form');
     expect(form).toHaveClass('event-form__stack');
+    expect(form?.firstElementChild).toHaveStyle({ alignItems: 'stretch' });
     expect(container.querySelector('.event-form__grid')).toBeInTheDocument();
+    expect(screen.getByLabelText('Название')).toHaveClass('field__control');
+    expect(screen.getByLabelText('Название').closest('.field')).toHaveClass('field');
     expect(screen.getByLabelText('Начало — дата')).toHaveAttribute('type', 'date');
     expect(screen.getByLabelText('Начало — время')).toHaveAttribute('type', 'time');
     expect(screen.getByLabelText('Окончание — дата')).toHaveAttribute('type', 'date');

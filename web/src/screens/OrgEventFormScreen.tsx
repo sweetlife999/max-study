@@ -143,7 +143,7 @@ function EventFormView({ initial, timezone, pending, error, onSubmit }: EventFor
         if (request) onSubmit(request);
       }}
     >
-      <Flex direction="column" gap={20} className="event-form__stack">
+      <Flex direction="column" gap={20} align="stretch" className="event-form__stack">
         <Field label={t('org.fieldTitle')} error={errorFor('title') && t('org.errTitle')}>
           {(props) => (
             <input

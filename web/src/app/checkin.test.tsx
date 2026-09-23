@@ -155,10 +155,12 @@ describe('manual check-in', () => {
     );
     const manualPanel = screen.getByRole('heading', { name: 'Ввести код' }).closest('section');
 
-    expect(scanPanel).toHaveClass('panel');
+    expect(scanPanel).toHaveClass('panel', 'full-width');
     expect(scanPanel?.firstElementChild).toHaveClass('full-width');
-    expect(manualPanel).toHaveClass('panel');
+    expect(manualPanel).toHaveClass('panel', 'full-width');
     expect(manualPanel?.firstElementChild).toHaveClass('full-width');
+    expect(scanPanel?.parentElement).toHaveStyle({ alignItems: 'stretch' });
+    expect(manualPanel?.parentElement).toHaveStyle({ alignItems: 'stretch' });
     expect(screen.getByRole('button', { name: 'Открыть камеру' }).parentElement).toHaveClass(
       'full-width',
     );

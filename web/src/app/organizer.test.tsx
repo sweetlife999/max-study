@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http } from 'msw';
 
 import { mockDb } from '../mocks/db';
@@ -44,6 +44,25 @@ describe('the organizer event list', () => {
 describe('creating an event', () => {
   beforeEach(consent);
 
+  it('uses a responsive form structure with separate date and time controls', async () => {
+    const { container } = renderApp({ route: '/org/events/new' });
+
+    const form = await screen
+      .findByRole('button', { name: 'Сохранить' })
+      .then((button) => button.closest('form'));
+
+    expect(form).toHaveClass('event-form');
+    expect(form).toHaveClass('event-form__stack');
+    expect(form?.firstElementChild).toHaveStyle({ alignItems: 'stretch' });
+    expect(container.querySelector('.event-form__grid')).toBeInTheDocument();
+    expect(screen.getByLabelText('Название')).toHaveClass('field__control');
+    expect(screen.getByLabelText('Название').closest('.field')).toHaveClass('field');
+    expect(screen.getByLabelText('Начало — дата')).toHaveAttribute('type', 'date');
+    expect(screen.getByLabelText('Начало — время')).toHaveAttribute('type', 'time');
+    expect(screen.getByLabelText('Окончание — дата')).toHaveAttribute('type', 'date');
+    expect(screen.getByLabelText('Окончание — время')).toHaveAttribute('type', 'time');
+  });
+
   it('offers only kinds from the university config, even before any event exists', async () => {
     mockDb().events = [];
     mockDb().kinds = [
@@ -71,12 +90,14 @@ describe('creating an event', () => {
 
     await user.type(await screen.findByLabelText('Название'), 'Новое событие');
     await user.selectOptions(screen.getByLabelText('Вид активности'), 'council');
-    const starts = screen.getByLabelText('Начало');
-    const ends = screen.getByLabelText('Окончание');
-    await user.clear(starts);
-    await user.type(starts, '2026-10-01T10:00');
-    await user.clear(ends);
-    await user.type(ends, '2026-10-01T09:00');
+    const startsDate = screen.getByLabelText('Начало — дата');
+    const startsTime = screen.getByLabelText('Начало — время');
+    const endsDate = screen.getByLabelText('Окончание — дата');
+    const endsTime = screen.getByLabelText('Окончание — время');
+    fireEvent.change(startsDate, { target: { value: '2026-10-01' } });
+    fireEvent.change(startsTime, { target: { value: '10:00' } });
+    fireEvent.change(endsDate, { target: { value: '2026-10-01' } });
+    fireEvent.change(endsTime, { target: { value: '09:00' } });
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
 
     expect(await screen.findByText('Окончание должно быть позже начала')).toBeInTheDocument();
@@ -98,12 +119,14 @@ describe('creating an event', () => {
     await user.type(await screen.findByLabelText('Название'), 'Посвящение в студенты');
     await user.selectOptions(screen.getByLabelText('Вид активности'), 'council');
     await user.type(screen.getByLabelText('Место'), 'Актовый зал');
-    const starts = screen.getByLabelText('Начало');
-    const ends = screen.getByLabelText('Окончание');
-    await user.clear(starts);
-    await user.type(starts, '2026-10-01T10:00');
-    await user.clear(ends);
-    await user.type(ends, '2026-10-01T12:00');
+    const startsDate = screen.getByLabelText('Начало — дата');
+    const startsTime = screen.getByLabelText('Начало — время');
+    const endsDate = screen.getByLabelText('Окончание — дата');
+    const endsTime = screen.getByLabelText('Окончание — время');
+    fireEvent.change(startsDate, { target: { value: '2026-10-01' } });
+    fireEvent.change(startsTime, { target: { value: '10:00' } });
+    fireEvent.change(endsDate, { target: { value: '2026-10-01' } });
+    fireEvent.change(endsTime, { target: { value: '12:00' } });
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
 
     expect(await screen.findByRole('heading', { name: 'Управление событием' })).toBeInTheDocument();

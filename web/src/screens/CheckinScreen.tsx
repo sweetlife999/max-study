@@ -67,13 +67,13 @@ export function CheckinScreen() {
 
   return (
     <Page title={t('checkin.title')} backTo="/">
-      <Flex direction="column" gap={20}>
+      <Flex direction="column" gap={20} align="stretch">
         {needsFreshScan && (
           <Typography.Body variant="medium" role="status">
             {t('checkin.freshAfterConsent')}
           </Typography.Body>
         )}
-        <section className="panel" aria-labelledby="scan-heading">
+        <section className="panel full-width" aria-labelledby="scan-heading">
           <Flex direction="column" gap={8} className="full-width">
             <Typography.Title variant="small-strong" asChild>
               <h2 id="scan-heading">{t('checkin.scanHeading')}</h2>
@@ -276,7 +276,7 @@ function ManualCheckin({
   }
 
   return (
-    <section className="panel" aria-labelledby="manual-heading">
+    <section className="panel full-width" aria-labelledby="manual-heading">
       <Flex direction="column" gap={8} className="full-width">
         <Typography.Title variant="small-strong" asChild>
           <h2 id="manual-heading">{t('checkin.manualHeading')}</h2>

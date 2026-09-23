@@ -1,0 +1,240 @@
+# DATA-API 1.0
+# The values studentInitData and organizerInitData are supplied through the hackathon's
+# protected test-data channel. Never replace these placeholders with live launch data in Git.
+
+schemaVersion: "1.0"
+
+solution:
+  name: "вПульсе — Расписание"
+
+api:
+  baseUrl: "https://max.fblrkus.ru"
+  openapi: "./docs/openapi.json"
+  defaultHeaders:
+    Accept: "application/json"
+
+checks:
+  - id: "health"
+    name: "API and database availability"
+    method: "GET"
+    path: "/health"
+    role: "public"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["status", "db"]
+    timeoutMs: 5000
+    repeatable: true
+
+  - id: "student-me"
+    name: "Authenticate the student from fresh MAX launch data"
+    method: "GET"
+    path: "/api/me"
+    role: "student"
+    request:
+      headers:
+        X-Max-Init-Data: "${studentInitData}"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["id", "first_name", "consent", "is_organizer", "points"]
+    timeoutMs: 5000
+    repeatable: true
+
+  - id: "student-consent"
+    name: "Accept personal-data processing consent"
+    method: "POST"
+    path: "/api/me/consent"
+    role: "student"
+    dependsOn: ["student-me"]
+    request:
+      headers:
+        X-Max-Init-Data: "${studentInitData}"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["id", "consent"]
+    timeoutMs: 5000
+    repeatable: true
+
+  - id: "student-config"
+    name: "Load the university configuration"
+    method: "GET"
+    path: "/api/config"
+    role: "student"
+    dependsOn: ["student-consent"]
+    request:
+      headers:
+        X-Max-Init-Data: "${studentInitData}"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["university", "event_kinds", "onboarding_steps"]
+    timeoutMs: 5000
+    repeatable: true
+
+  - id: "student-onboarding"
+    name: "Read the student's onboarding progress"
+    method: "GET"
+    path: "/api/onboarding"
+    role: "student"
+    dependsOn: ["student-consent"]
+    request:
+      headers:
+        X-Max-Init-Data: "${studentInitData}"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["steps", "done_count", "total"]
+    timeoutMs: 5000
+    repeatable: true
+
+  - id: "organizer-me"
+    name: "Authenticate the organizer from fresh MAX launch data"
+    method: "GET"
+    path: "/api/me"
+    role: "organizer"
+    request:
+      headers:
+        X-Max-Init-Data: "${organizerInitData}"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["id", "first_name", "consent", "is_organizer"]
+    timeoutMs: 5000
+    repeatable: true
+
+  - id: "organizer-consent"
+    name: "Ensure the organizer has accepted personal-data processing"
+    method: "POST"
+    path: "/api/me/consent"
+    role: "organizer"
+    dependsOn: ["organizer-me"]
+    request:
+      headers:
+        X-Max-Init-Data: "${organizerInitData}"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["id", "consent", "is_organizer"]
+    timeoutMs: 5000
+    repeatable: true
+
+  - id: "organizer-events"
+    name: "Select the organizer's prepared current event"
+    description: "Before the run, use a dedicated organizer with exactly one event in the current check-in window, as described in docs/TECHNICAL_CHECK.md. The API orders this list by starts_at descending, then id descending."
+    method: "GET"
+    path: "/api/org/events"
+    role: "organizer"
+    dependsOn: ["organizer-consent"]
+    request:
+      headers:
+        X-Max-Init-Data: "${organizerInitData}"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["items"]
+    timeoutMs: 5000
+    repeatable: true
+    extract:
+      eventId: "$.items[0].id"
+
+  - id: "open-checkin"
+    name: "Open check-in for the prepared event"
+    method: "PATCH"
+    path: "/api/org/events/{event_id}"
+    role: "organizer"
+    dependsOn: ["organizer-events"]
+    request:
+      path:
+        event_id: "${eventId}"
+      headers:
+        X-Max-Init-Data: "${organizerInitData}"
+        Content-Type: "application/json"
+      body:
+        checkin_open: true
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["id", "checkin_open"]
+    timeoutMs: 5000
+    repeatable: true
+
+  - id: "get-checkin-code"
+    name: "Get the rotating QR payload and six-digit code"
+    method: "GET"
+    path: "/api/org/events/{event_id}/qr"
+    role: "organizer"
+    dependsOn: ["open-checkin"]
+    request:
+      path:
+        event_id: "${eventId}"
+      headers:
+        X-Max-Init-Data: "${organizerInitData}"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["code", "deeplink", "expires_at", "step_seconds"]
+    timeoutMs: 5000
+    repeatable: true
+    extract:
+      checkinCode: "$.code"
+
+  - id: "student-checkin"
+    name: "Check the student in with the current code"
+    description: "Run immediately after get-checkin-code because the code rotates. A repeated run returns already=true and does not award points twice."
+    method: "POST"
+    path: "/api/checkins"
+    role: "student"
+    dependsOn: ["student-consent", "get-checkin-code"]
+    request:
+      headers:
+        X-Max-Init-Data: "${studentInitData}"
+        Content-Type: "application/json"
+      body:
+        event_id: "${eventId}"
+        code: "${checkinCode}"
+        method: "code"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["event", "already", "points_total"]
+    timeoutMs: 5000
+    repeatable: true
+
+  - id: "organizer-attendance"
+    name: "Verify the updated attendance list"
+    method: "GET"
+    path: "/api/org/events/{event_id}/attendance"
+    role: "organizer"
+    dependsOn: ["student-checkin"]
+    request:
+      path:
+        event_id: "${eventId}"
+      headers:
+        X-Max-Init-Data: "${organizerInitData}"
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["items", "rsvp_count", "checkin_count"]
+    timeoutMs: 5000
+    repeatable: true
+
+cleanup:
+  - id: "close-checkin"
+    method: "PATCH"
+    path: "/api/org/events/{event_id}"
+    role: "organizer"
+    request:
+      path:
+        event_id: "${eventId}"
+      headers:
+        X-Max-Init-Data: "${organizerInitData}"
+        Content-Type: "application/json"
+      body:
+        checkin_open: false
+    expected:
+      statusCodes: [200]
+      contentType: "application/json"
+      requiredFields: ["id", "checkin_open"]
+    timeoutMs: 5000

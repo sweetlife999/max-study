@@ -1,5 +1,12 @@
 import type { Event } from '../api/types';
-import { emptyEventForm, eventToForm, validateEventForm, type EventForm } from './eventForm';
+import {
+  combineWallTime,
+  emptyEventForm,
+  eventToForm,
+  splitWallTime,
+  validateEventForm,
+  type EventForm,
+} from './eventForm';
 
 const TZ = 'Europe/Moscow';
 
@@ -13,6 +20,24 @@ const valid: EventForm = {
   points: '10',
   onboardingStep: '',
 };
+
+describe('wall time controls', () => {
+  it.each([
+    ['2026-10-01', '10:00', '2026-10-01T10:00'],
+    ['', '10:00', 'T10:00'],
+    ['2026-10-01', '', '2026-10-01T'],
+    ['', '', ''],
+  ])('preserves date/time parts for %s and %s', (date, time, expected) => {
+    expect(combineWallTime(date, time)).toBe(expected);
+    expect(splitWallTime(expected)).toEqual({ date, time });
+  });
+
+  it.each(['T10:00', '2026-10-01T'])('rejects incomplete wall time %s', (startsAt) => {
+    const { errors, request } = validateEventForm({ ...valid, startsAt }, TZ);
+    expect(errors.startsAt).toBe('invalid');
+    expect(request).toBeNull();
+  });
+});
 
 describe('validateEventForm', () => {
   it('builds a request with UTC times converted from the university time zone', () => {

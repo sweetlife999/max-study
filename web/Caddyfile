@@ -8,6 +8,13 @@
 
 	encode zstd gzip
 
+	# The technical-review contract lives on the public origin alongside the mini-app. These
+	# paths must reach FastAPI before the SPA fallback turns them into index.html.
+	@api_contract path /health /openapi.json
+	handle @api_contract {
+		reverse_proxy {$API_UPSTREAM:api:8000}
+	}
+
 	handle /api/* {
 		reverse_proxy {$API_UPSTREAM:api:8000}
 	}

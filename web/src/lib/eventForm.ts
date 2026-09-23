@@ -16,6 +16,21 @@ export interface EventForm {
   onboardingStep: string;
 }
 
+export interface WallTimeParts {
+  date: string;
+  time: string;
+}
+
+export function splitWallTime(value: string): WallTimeParts {
+  const [date = '', time = ''] = value.split('T');
+  return { date, time };
+}
+
+export function combineWallTime(date: string, time: string): string {
+  if (date === '' && time === '') return '';
+  return `${date}T${time}`;
+}
+
 export type FieldError = 'required' | 'invalid' | 'before_start';
 
 export interface EventFormErrors {

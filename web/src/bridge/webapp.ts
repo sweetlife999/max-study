@@ -46,6 +46,9 @@ export interface WebApp {
   /** Present in max-web-app.js (posts `WebAppReady`), not described on the docs page. */
   ready?: () => void;
 
+  /** Present in max-web-app.js (posts `WebAppClose`). */
+  close?: () => void;
+
   /** Resolves with the recognised QR content; `fileSelect=false` allows only the camera. */
   openCodeReader?: (fileSelect?: boolean) => Promise<unknown>;
 

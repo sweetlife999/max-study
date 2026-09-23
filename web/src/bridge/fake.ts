@@ -23,6 +23,7 @@ export class FakeBridge implements Bridge {
   readonly canScanQr: boolean;
 
   readyCalls = 0;
+  closeCalls = 0;
   scanCalls = 0;
   brightnessRequested = false;
   readonly notifications: HapticNotificationType[] = [];
@@ -52,6 +53,10 @@ export class FakeBridge implements Bridge {
 
   ready(): void {
     this.readyCalls += 1;
+  }
+
+  close(): void {
+    this.closeCalls += 1;
   }
 
   scanQr(): Promise<ScanOutcome> {

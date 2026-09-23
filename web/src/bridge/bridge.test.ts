@@ -29,6 +29,7 @@ describe('createMaxBridge outside MAX', () => {
     await expect(bridge.share({ text: 'hi' })).resolves.toBe('unavailable');
     expect(() => bridge.ready()).not.toThrow();
     expect(() => bridge.notify('success')).not.toThrow();
+    expect(() => bridge.close()).not.toThrow();
     expect(() => bridge.requestMaxBrightness()).not.toThrow();
     expect(() => bridge.restoreBrightness()).not.toThrow();
     expect(() => bridge.showBackButton(() => undefined)()).not.toThrow();
@@ -37,6 +38,32 @@ describe('createMaxBridge outside MAX', () => {
   it('treats an empty initData as "not launched by a MAX client"', () => {
     expect(createMaxBridge(webApp({ initData: '' }), '').isInMax).toBe(false);
     expect(createMaxBridge(webApp({ initData: null }), '').isInMax).toBe(false);
+  });
+});
+
+describe('close', () => {
+  it('closes an in-MAX app', () => {
+    const close = vi.fn();
+
+    createMaxBridge(webApp({ close }), '').close();
+
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call the client outside MAX', () => {
+    const close = vi.fn();
+
+    createMaxBridge(webApp({ initData: '', close }), '').close();
+
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('survives a client that rejects the close call', () => {
+    const close = vi.fn(() => {
+      throw new Error('unsupported');
+    });
+
+    expect(() => createMaxBridge(webApp({ close }), '').close()).not.toThrow();
   });
 });
 

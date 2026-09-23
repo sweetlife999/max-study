@@ -126,15 +126,10 @@ function QrScreenBody({ event }: { event: Event }) {
           stretched
           loading={sendToChat.isPending}
           disabled={sendToChat.isPending}
-          onClick={() => sendToChat.mutate()}
+          onClick={() => sendToChat.mutate(undefined, { onSuccess: () => bridge.close() })}
         >
           {t('org.qrSendToChat')}
         </Button>
-        {sendToChat.isSuccess && (
-          <Typography.Body variant="small" role="status">
-            {t('org.qrSentToChat')}
-          </Typography.Body>
-        )}
         <InlineError error={sendToChat.error} />
         <Button size="large" variant="ghost" stretched onClick={() => void navigate(back)}>
           {t('common.back')}

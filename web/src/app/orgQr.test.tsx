@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 
 import type { EventQr } from '../api/types';
 import { MOCK_STEP_SECONDS, mockDb } from '../mocks/db';
+import { apiError } from '../mocks/handlers';
 import { server } from '../mocks/server';
 import { renderApp } from '../test/render';
 
@@ -283,10 +284,7 @@ describe('the full-screen QR', () => {
   it('stays open and shows an inline error when sending to the chat fails', async () => {
     qrEndpoint();
     server.use(
-      http.post(
-        `*/api/org/events/${OPEN_EVENT_ID}/qr/chat`,
-        () => new HttpResponse(null, { status: 503 }),
-      ),
+      http.post(`*/api/org/events/${OPEN_EVENT_ID}/qr/chat`, () => apiError('checkin_window_over')),
     );
     const { bridge, user } = renderApp({
       route: `/org/events/${OPEN_EVENT_ID}/qr`,
@@ -295,7 +293,7 @@ describe('the full-screen QR', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Показать QR в чате' }));
 
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(await screen.findByText('Отметка на это событие уже закрылась.')).toBeInTheDocument();
     expect(bridge.closeCalls).toBe(0);
   });
 

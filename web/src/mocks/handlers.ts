@@ -43,6 +43,7 @@ type ErrorCode =
   | 'validation_error'
   | 'invalid_code'
   | 'checkin_closed'
+  | 'checkin_window_over'
   | 'rate_limited';
 
 const MESSAGES: Record<ErrorCode, Record<Lang, string>> = {
@@ -53,6 +54,10 @@ const MESSAGES: Record<ErrorCode, Record<Lang, string>> = {
   validation_error: { ru: 'Проверьте поля формы.', en: 'Check the form fields.' },
   invalid_code: { ru: 'Неверный или устаревший код.', en: 'Invalid or expired code.' },
   checkin_closed: { ru: 'Отметка закрыта.', en: 'Check-in is closed.' },
+  checkin_window_over: {
+    ru: 'Отметка на это событие уже закрылась.',
+    en: 'Check-in for this event has already closed.',
+  },
   rate_limited: { ru: 'Слишком много попыток.', en: 'Too many attempts.' },
 };
 
@@ -64,6 +69,7 @@ const STATUS: Record<ErrorCode, number> = {
   validation_error: 422,
   invalid_code: 400,
   checkin_closed: 409,
+  checkin_window_over: 403,
   rate_limited: 429,
 };
 
@@ -388,6 +394,7 @@ export const handlers = [
     guarded(({ params }) => {
       const event = findOwnEvent(params.id);
       if (typeof event === 'string') return apiError(event);
+      if (event.endsAt <= Date.now()) return apiError('checkin_window_over');
       if (!event.checkinOpen) return apiError('checkin_closed');
       const window = currentWindow(Date.now());
       const code = mockCode(event.id, window);
@@ -407,6 +414,7 @@ export const handlers = [
     guarded(({ params }) => {
       const event = findOwnEvent(params.id);
       if (typeof event === 'string') return apiError(event);
+      if (event.endsAt <= Date.now()) return apiError('checkin_window_over');
       if (!event.checkinOpen) return apiError('checkin_closed');
       return new HttpResponse(null, { status: 202 });
     }),

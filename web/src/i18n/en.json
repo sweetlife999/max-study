@@ -122,6 +122,7 @@
   "org.edit": "Edit",
   "org.checkinOpen": "Check-in open",
   "org.checkinOpenHint": "Turn this on before starting and show students the QR screen: the code and six digits refresh automatically.",
+  "org.eventFinishedHint": "This event has ended — check-in and the QR code can no longer be opened.",
   "org.showQr": "Show the QR code",
   "org.attendance": "Attendance",
   "org.createTitle": "New event",

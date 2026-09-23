@@ -14,6 +14,7 @@ from campus.domain.context import CHECKIN_WINDOW_MARGIN as CHECKIN_MARGIN
 from campus.domain.deeplinks import checkin_deeplink
 from campus.domain.errors import (
     CheckinClosedError,
+    CheckinWindowOverError,
     EventNotFoundError,
     InvalidTimeRangeError,
     NotEventOwnerError,
@@ -233,6 +234,8 @@ class EventService(Service):
         The caller must already have established ownership; ``checkin_open`` is enforced here
         because §7 makes GET /org/events/{id}/qr answer 403 when check-in is closed.
         """
+        if self.now() >= event.ends_at:
+            raise CheckinWindowOverError(f"event {event.id}")
         if not event.checkin_open:
             raise CheckinClosedError(f"event {event.id}")
         window = codes.current_code(

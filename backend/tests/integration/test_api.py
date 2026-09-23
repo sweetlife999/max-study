@@ -129,6 +129,37 @@ async def test_organizer_event_rsvp_checkin_csv_and_qr(client: httpx.AsyncClient
     ] == 1
 
 
+async def test_finished_event_rejects_qr_chat_without_enqueueing(
+    client: httpx.AsyncClient, world: World
+) -> None:
+    organizer = await world.organizer()
+    event = await world.event(
+        organizer=organizer,
+        starts_in=-timedelta(hours=2),
+        duration=timedelta(hours=1),
+    )
+    await world.session.commit()
+
+    response = await client.post(
+        f"/api/org/events/{event.id}/qr/chat", headers=headers(world, organizer)
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {
+            "code": "checkin_window_over",
+            "message": "Отметка на это событие уже закрылась.",
+        }
+    }
+    assert await world.qr_displays.active_for(organizer_id=organizer.id, event_id=event.id) is None
+    assert await world.outbox.count() == 0
+    qr_response = await client.get(
+        f"/api/org/events/{event.id}/qr", headers=headers(world, organizer)
+    )
+    assert qr_response.status_code == 403
+    assert qr_response.json()["error"]["code"] == "checkin_window_over"
+
+
 async def test_roles_and_ownership_block_all_private_routes(
     client: httpx.AsyncClient, world: World
 ):

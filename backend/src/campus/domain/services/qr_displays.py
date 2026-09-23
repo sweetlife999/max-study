@@ -12,7 +12,12 @@ from sqlalchemy import select, update
 
 from campus.db.models import Event, QrDisplay, User
 from campus.domain import codes
-from campus.domain.errors import CheckinClosedError, QrDisplayNotFoundError, ValidationFailedError
+from campus.domain.errors import (
+    CheckinClosedError,
+    CheckinWindowOverError,
+    QrDisplayNotFoundError,
+    ValidationFailedError,
+)
 from campus.domain.services.base import Service, require_aware
 from campus.domain.services.outbox import OutboxService
 
@@ -89,12 +94,17 @@ class QrDisplayService(Service):
         Starting twice is not an error: the existing display is kept and its end time refreshed,
         which is what the partial unique index in §4 allows.
         """
-        if not event.checkin_open:
-            raise CheckinClosedError(f"event {event.id}")
         destination_user = max_user_id if max_chat_id is None else None
         if max_chat_id is None and destination_user is None:
             raise ValidationFailedError("max_chat_id", "a chat or a user id is required")
         until = require_aware(active_until, "active_until") if active_until else event.ends_at
+        # A custom display lifetime may intentionally already be over (the bot uses this state
+        # to render the "start again" control). The event deadline itself is the condition that
+        # makes accepting a new chat delivery misleading.
+        if self.now() >= event.ends_at:
+            raise CheckinWindowOverError(f"event {event.id}")
+        if not event.checkin_open:
+            raise CheckinClosedError(f"event {event.id}")
 
         existing = await self.active_for(organizer_id=organizer.id, event_id=event.id)
         if existing is not None:

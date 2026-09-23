@@ -9,6 +9,7 @@ from campus.db.models import OutboxMessage
 from campus.domain import codes
 from campus.domain.errors import (
     CheckinClosedError,
+    CheckinWindowOverError,
     QrDisplayNotFoundError,
     ValidationFailedError,
 )
@@ -56,6 +57,21 @@ async def test_a_closed_event_shows_no_qr(world: World) -> None:
 
     with pytest.raises(CheckinClosedError):
         await world.qr_displays.start(event=event, organizer=organizer, max_chat_id=CHAT_ID)
+
+
+async def test_a_finished_event_rejects_qr_before_creating_display_or_outbox(world: World) -> None:
+    organizer = await world.organizer()
+    event = await world.event(
+        organizer=organizer,
+        starts_in=-timedelta(hours=2),
+        duration=timedelta(hours=1),
+    )
+
+    with pytest.raises(CheckinWindowOverError):
+        await world.qr_displays.start(event=event, organizer=organizer, max_chat_id=CHAT_ID)
+
+    assert await world.qr_displays.active_for(organizer_id=organizer.id, event_id=event.id) is None
+    assert await world.outbox.count() == 0
 
 
 async def test_only_one_display_per_organizer_and_event(world: World) -> None:

@@ -9,6 +9,7 @@ import { Page } from '../components/Page';
 import { InlineError, QueryState } from '../components/states';
 import { useI18n } from '../i18n/i18n';
 import { parseId } from '../lib/routeParams';
+import { useNow } from '../lib/useNow';
 
 export function OrgEventScreen() {
   const { t } = useI18n();
@@ -30,6 +31,8 @@ function OrgEventDetails({ event }: { event: Event }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const update = useUpdateEventMutation(event.id);
+  const now = useNow(1000);
+  const isFinished = Date.parse(event.ends_at) <= now;
 
   return (
     <Flex direction="column" gap={16} align="stretch" className="org-event-screen">
@@ -43,15 +46,15 @@ function OrgEventDetails({ event }: { event: Event }) {
             </Typography.Label>
             <Switch
               aria-label={t('org.checkinOpen')}
-              checked={event.checkin_open}
-              disabled={update.isPending}
+              checked={event.checkin_open && !isFinished}
+              disabled={update.isPending || isFinished}
               onChange={(changeEvent) => {
                 update.mutate({ checkin_open: changeEvent.target.checked });
               }}
             />
           </Flex>
           <Typography.Body variant="small" className="muted">
-            {t('org.checkinOpenHint')}
+            {isFinished ? t('org.eventFinishedHint') : t('org.checkinOpenHint')}
           </Typography.Body>
           <InlineError error={update.error} />
         </Flex>
@@ -61,16 +64,16 @@ function OrgEventDetails({ event }: { event: Event }) {
         <Button
           size="large"
           stretched
-          disabled={!event.checkin_open}
+          disabled={!event.checkin_open || isFinished}
           onClick={() => void navigate(`/org/events/${event.id}/qr`)}
         >
           {t('org.showQr')}
         </Button>
-        {!event.checkin_open && (
+        {!isFinished && !event.checkin_open ? (
           <Typography.Body variant="small" className="muted">
             {t('org.qrClosedHint')}
           </Typography.Body>
-        )}
+        ) : null}
       </Flex>
 
       <CellList mode="island" className="full-width">

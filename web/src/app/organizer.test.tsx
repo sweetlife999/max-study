@@ -198,6 +198,23 @@ describe('managing an event', () => {
 
     expect(await screen.findByRole('button', { name: 'Показать QR' })).toBeDisabled();
   });
+
+  it('does not allow opening check-in or QR for a finished event', async () => {
+    const event = mockDb().events.find((candidate) => candidate.id === CLOSED_EVENT_ID);
+    if (!event) throw new Error('fixture event missing');
+    event.startsAt = Date.now() - 2 * 60 * 60 * 1000;
+    event.endsAt = Date.now() - 60 * 60 * 1000;
+
+    renderApp({ route: `/org/events/${CLOSED_EVENT_ID}` });
+
+    const toggle = await screen.findByRole('switch', { name: 'Отметка открыта' });
+    expect(toggle).toBeDisabled();
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Показать QR' })).toBeDisabled();
+    expect(
+      screen.getByText('Событие завершено — открыть отметку и показать QR уже нельзя.'),
+    ).toBeInTheDocument();
+  });
 });
 
 describe('attendance', () => {

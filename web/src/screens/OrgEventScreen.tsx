@@ -32,17 +32,17 @@ function OrgEventDetails({ event }: { event: Event }) {
   const update = useUpdateEventMutation(event.id);
 
   return (
-    <Flex direction="column" gap={16}>
+    <Flex direction="column" gap={16} align="stretch" className="org-event-screen">
       <EventInfo event={event} />
 
-      <section className="panel">
-        <Flex direction="column" gap={8}>
+      <section className="panel full-width" aria-labelledby="checkin-open-heading">
+        <Flex direction="column" gap={8} align="stretch" className="full-width">
           <Flex align="center" justify="space-between" gap={12}>
             <Typography.Label variant="medium-strong" asChild>
-              <label htmlFor="checkin-open">{t('org.checkinOpen')}</label>
+              <span id="checkin-open-heading">{t('org.checkinOpen')}</span>
             </Typography.Label>
             <Switch
-              id="checkin-open"
+              aria-label={t('org.checkinOpen')}
               checked={event.checkin_open}
               disabled={update.isPending}
               onChange={(changeEvent) => {
@@ -57,7 +57,7 @@ function OrgEventDetails({ event }: { event: Event }) {
         </Flex>
       </section>
 
-      <Flex direction="column" gap={8}>
+      <Flex direction="column" gap={8} align="stretch" className="full-width org-event-screen__qr">
         <Button
           size="large"
           stretched
@@ -73,7 +73,7 @@ function OrgEventDetails({ event }: { event: Event }) {
         )}
       </Flex>
 
-      <CellList mode="island">
+      <CellList mode="island" className="full-width">
         <CellSimple
           as="button"
           showChevron

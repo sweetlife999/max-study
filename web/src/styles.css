@@ -123,6 +123,30 @@ body {
   min-width: 0;
 }
 
+.org-event-screen,
+.event-info {
+  width: 100%;
+  min-width: 0;
+}
+
+.org-event-screen__qr {
+  width: 100%;
+}
+
+.event-info__facts {
+  width: 100%;
+}
+
+.event-info__description {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--background-card, Canvas);
+  overflow-wrap: anywhere;
+}
+
 .event-form-page {
   max-width: 960px;
   padding-bottom: calc(32px + env(safe-area-inset-bottom));

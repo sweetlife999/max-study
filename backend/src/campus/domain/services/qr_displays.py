@@ -98,7 +98,10 @@ class QrDisplayService(Service):
         if max_chat_id is None and destination_user is None:
             raise ValidationFailedError("max_chat_id", "a chat or a user id is required")
         until = require_aware(active_until, "active_until") if active_until else event.ends_at
-        if self.now() >= min(until, event.ends_at):
+        # A custom display lifetime may intentionally already be over (the bot uses this state
+        # to render the "start again" control). The event deadline itself is the condition that
+        # makes accepting a new chat delivery misleading.
+        if self.now() >= event.ends_at:
             raise CheckinWindowOverError(f"event {event.id}")
         if not event.checkin_open:
             raise CheckinClosedError(f"event {event.id}")

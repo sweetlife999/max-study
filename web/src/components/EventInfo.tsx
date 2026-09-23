@@ -11,7 +11,7 @@ export function EventInfo({ event }: { event: Event }) {
   const me = useSession();
 
   return (
-    <Flex direction="column" gap={12}>
+    <Flex direction="column" gap={12} align="stretch" className="event-info">
       <Flex direction="column" gap={4}>
         <Typography.Label variant="medium" className="muted">
           {event.kind_title}
@@ -20,7 +20,7 @@ export function EventInfo({ event }: { event: Event }) {
           <h2 className="event-title">{event.title}</h2>
         </Typography.Headline>
       </Flex>
-      <CellList mode="island">
+      <CellList mode="island" className="full-width event-info__facts">
         <CellSimple
           overline={t('event.when')}
           title={formatRange(event.starts_at, event.ends_at, me.university.timezone, lang)}
@@ -30,7 +30,7 @@ export function EventInfo({ event }: { event: Event }) {
         <CellSimple overline={t('event.attendees')} title={String(event.attendees_count)} />
       </CellList>
       {event.description && (
-        <Typography.Body variant="medium" className="event-description">
+        <Typography.Body variant="medium" className="event-description event-info__description">
           {event.description}
         </Typography.Body>
       )}

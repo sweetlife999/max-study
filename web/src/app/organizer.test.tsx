@@ -152,13 +152,44 @@ describe('managing an event', () => {
   it('opens and closes check-in with the switch', async () => {
     const { user } = renderApp({ route: `/org/events/${CLOSED_EVENT_ID}` });
 
-    const toggle = await screen.findByLabelText('Отметка открыта');
+    const toggle = await screen.findByRole('switch', { name: 'Отметка открыта' });
     expect(toggle).not.toBeChecked();
 
     await user.click(toggle);
 
     await waitFor(() => {
       expect(mockDb().events.find((e) => e.id === CLOSED_EVENT_ID)?.checkinOpen).toBe(true);
+    });
+  });
+
+  it('keeps the organizer event screen as a full-width vertical layout', async () => {
+    const { container } = renderApp({ route: `/org/events/${OPEN_EVENT_ID}` });
+
+    await screen.findByText('Открытое заседание студсовета');
+    const details = container.querySelector('.org-event-screen');
+    expect(details).toHaveClass('org-event-screen');
+    expect(details).toHaveStyle({ alignItems: 'stretch' });
+    expect(details?.querySelector('.event-info')).toHaveClass('event-info');
+    expect(details?.querySelector('.event-info__facts')).toHaveClass('full-width');
+    expect(details?.querySelector('.event-info__description')).toHaveClass(
+      'event-info__description',
+    );
+    expect(details?.querySelector('.org-event-screen__qr')).toHaveClass('full-width');
+    expect(details?.querySelector('button')?.parentElement).toHaveClass('full-width');
+    expect(container.querySelector('.org-event-screen > .panel')).toHaveClass('full-width');
+  });
+
+  it('switches check-in from the switch control without a label hit area', async () => {
+    const { user } = renderApp({ route: `/org/events/${CLOSED_EVENT_ID}` });
+
+    const toggle = await screen.findByRole('switch', { name: 'Отметка открыта' });
+    expect(toggle).not.toHaveAttribute('id');
+    expect(toggle.closest('label')).toBeNull();
+    await user.click(toggle);
+
+    await waitFor(() => {
+      expect(toggle).toBeChecked();
+      expect(mockDb().events.find((event) => event.id === CLOSED_EVENT_ID)?.checkinOpen).toBe(true);
     });
   });
 

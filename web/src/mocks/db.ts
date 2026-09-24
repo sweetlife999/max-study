@@ -5,7 +5,6 @@
 import type { CheckinMethod, Lang, OnboardingStepType } from '../api/types';
 
 export const MOCK_STEP_SECONDS = 10;
-export const MOCK_TOLERANCE_STEPS = 2;
 export const MOCK_BOT_USERNAME = 'campus_demo_bot';
 export const MOCK_RATE_LIMIT = { attempts: 10, windowMs: 10 * 60 * 1000 };
 const CHECKIN_MARGIN_MS = 30 * 60 * 1000;
@@ -226,11 +225,7 @@ export function currentWindow(now: number): number {
 }
 
 export function isCodeValid(eventId: number, code: string, now: number): boolean {
-  const window = currentWindow(now);
-  for (let w = window - MOCK_TOLERANCE_STEPS; w <= window; w += 1) {
-    if (mockCode(eventId, w) === code) return true;
-  }
-  return false;
+  return mockCode(eventId, currentWindow(now)) === code;
 }
 
 export function isWithinCheckinWindow(event: MockEvent, now: number): boolean {

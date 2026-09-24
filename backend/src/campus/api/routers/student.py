@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from campus.api.auth import Authenticated, Consenting
 from campus.api.schemas import MAX_PAGE, CheckinRequest, EventId, EventList, StepKey, UpdateMe
+from campus.domain.deeplinks import parse_checkin_start_param
 from campus.domain.services import AppConfigService, CheckinService, OnboardingService, RsvpService
 from campus.domain.views import (
     AppConfigView,
@@ -86,6 +87,17 @@ async def delete_rsvp(event_id: EventId, person: Consenting) -> EventView:
 
 @router.post("/checkins")
 async def checkin(body: CheckinRequest, person: Consenting) -> CheckinResult:
+    launch = parse_checkin_start_param(person.init_data.start_param)
+    observed_at = (
+        person.init_data.auth_date
+        if body.method == "qr"
+        and launch is not None
+        and launch.event_id == body.event_id
+        and launch.code == body.code
+        else None
+    )
     return await CheckinService(person.session, person.config, person.clock).check_in_view(
-        user=person.user, **body.model_dump()
+        user=person.user,
+        code_observed_at=observed_at,
+        **body.model_dump(),
     )

@@ -6,7 +6,11 @@ import pytest
 from sqlalchemy import func, select
 
 from campus.db.models import CheckinAttempt, OutboxMessage
-from campus.domain.context import CHECKIN_RATE_LIMIT_ATTEMPTS, CHECKIN_RATE_LIMIT_WINDOW
+from campus.domain.context import (
+    CHECKIN_QR_SUBMIT_GRACE,
+    CHECKIN_RATE_LIMIT_ATTEMPTS,
+    CHECKIN_RATE_LIMIT_WINDOW,
+)
 from campus.domain.errors import (
     AmbiguousCodeError,
     CheckinClosedError,
@@ -78,16 +82,54 @@ async def test_a_bare_code_finds_the_one_open_event(world: World) -> None:
     assert outcome.event.id == event.id
 
 
-async def test_a_code_from_the_previous_window_still_works(world: World) -> None:
+async def test_an_expired_qr_code_is_refused_immediately(world: World) -> None:
     organizer = await world.organizer()
     student = await world.user()
     event = await world.open_event_now(organizer=organizer)
     code = world.code_for(event)
 
     world.clock.advance(timedelta(seconds=world.config.checkin_code_step_seconds))
-    outcome = await world.checkins.check_in(user=student, code=code, method="qr")
+
+    with pytest.raises(CodeExpiredError):
+        await world.checkins.check_in(user=student, code=code, method="qr", event_id=event.id)
+
+
+async def test_a_fresh_qr_survives_the_mini_app_launch_delay(world: World) -> None:
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.open_event_now(organizer=organizer)
+    code = world.code_for(event)
+    scanned_at = world.clock.now()
+
+    world.clock.advance(timedelta(seconds=15))
+    outcome = await world.checkins.check_in(
+        user=student,
+        code=code,
+        method="qr",
+        event_id=event.id,
+        code_observed_at=scanned_at,
+    )
 
     assert outcome.already is False
+
+
+async def test_scan_time_cannot_rescue_a_qr_after_the_submission_grace(world: World) -> None:
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.open_event_now(organizer=organizer)
+    code = world.code_for(event)
+    scanned_at = world.clock.now()
+
+    world.clock.advance(CHECKIN_QR_SUBMIT_GRACE + timedelta(seconds=1))
+
+    with pytest.raises(CodeExpiredError):
+        await world.checkins.check_in(
+            user=student,
+            code=code,
+            method="qr",
+            event_id=event.id,
+            code_observed_at=scanned_at,
+        )
 
 
 async def test_checking_in_twice_is_idempotent(world: World) -> None:
@@ -179,15 +221,15 @@ async def test_a_wrong_code_is_refused(world: World) -> None:
         )
 
 
-async def test_a_code_from_a_window_just_past_the_tolerance_is_expired_not_wrong(
+async def test_a_code_from_the_previous_window_is_expired_not_wrong(
     world: World,
 ) -> None:
-    """Scanning is slow sometimes; §7 tells the student to scan again rather than "wrong code"."""
+    """§7 tells the student to scan again rather than calling a genuine old code wrong."""
     organizer = await world.organizer()
     student = await world.user()
     event = await world.open_event_now(organizer=organizer)
     scanned = world.code_for(event)
-    world.clock.advance(timedelta(seconds=60))
+    world.clock.advance(timedelta(seconds=world.config.checkin_code_step_seconds))
 
     with pytest.raises(CodeExpiredError):
         await world.checkins.check_in(user=student, code=scanned, method="qr", event_id=event.id)
@@ -262,7 +304,7 @@ def seed_showing(world: World, *, event_id: int, code: str) -> bytes:
 
     step = world.config.checkin_code_step_seconds
     current = codes.window_for(world.clock.now(), step)
-    windows = range(current - world.config.checkin_code_tolerance_steps, current + 1)
+    windows = range(current, current + 1)
     for attempt in range(50_000_000):
         candidate = attempt.to_bytes(codes.SEED_BYTES, "big")
         if any(codes.compute_code(candidate, event_id, window) == code for window in windows):

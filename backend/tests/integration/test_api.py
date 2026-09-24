@@ -21,13 +21,21 @@ from tests.integration.factories import World
 TOKEN = "unit-test-token"
 
 
-def headers(world: World, user: User, *, age: timedelta = timedelta()) -> dict[str, str]:
+def headers(
+    world: World,
+    user: User,
+    *,
+    age: timedelta = timedelta(),
+    start_param: str | None = None,
+) -> dict[str, str]:
     values = {
         "auth_date": str(int((world.clock.now() - age).timestamp())),
         "user": json.dumps(
             {"id": user.max_user_id, "first_name": user.first_name, "language_code": user.lang}
         ),
     }
+    if start_param is not None:
+        values["start_param"] = start_param
     values["hash"] = signature(TOKEN, launch_params(list(values.items())))
     return {"X-Max-Init-Data": urlencode(values, quote_via=quote)}
 
@@ -127,6 +135,67 @@ async def test_organizer_event_rsvp_checkin_csv_and_qr(client: httpx.AsyncClient
     assert (await client.get("/api/events", headers=student)).json()["items"][0][
         "attendees_count"
     ] == 1
+
+
+async def test_an_expired_qr_returns_code_expired(client: httpx.AsyncClient, world: World) -> None:
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.open_event_now(organizer=organizer)
+    scanned_code = world.code_for(event)
+    await world.session.commit()
+    world.clock.advance(timedelta(seconds=world.config.checkin_code_step_seconds))
+
+    response = await client.post(
+        "/api/checkins",
+        headers=headers(world, student, start_param=f"ci_{event.id}_{scanned_code}"),
+        json={"event_id": event.id, "code": scanned_code, "method": "qr"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "code_expired"
+
+
+async def test_a_qr_scanned_while_fresh_survives_the_signed_launch_delay(
+    client: httpx.AsyncClient, world: World
+) -> None:
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.open_event_now(organizer=organizer)
+    scanned_code = world.code_for(event)
+    scan_headers = headers(world, student, start_param=f"ci_{event.id}_{scanned_code}")
+    await world.session.commit()
+    world.clock.advance(timedelta(seconds=15))
+
+    response = await client.post(
+        "/api/checkins",
+        headers=scan_headers,
+        json={"event_id": event.id, "code": scanned_code, "method": "qr"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["already"] is False
+
+
+async def test_signed_launch_time_only_applies_to_the_exact_qr(
+    client: httpx.AsyncClient, world: World
+) -> None:
+    organizer = await world.organizer()
+    student = await world.user()
+    event = await world.open_event_now(organizer=organizer)
+    scanned_code = world.code_for(event)
+    different_code = world.code_never_valid_for(event)
+    launch_headers = headers(world, student, start_param=f"ci_{event.id}_{different_code}")
+    await world.session.commit()
+    world.clock.advance(timedelta(seconds=15))
+
+    response = await client.post(
+        "/api/checkins",
+        headers=launch_headers,
+        json={"event_id": event.id, "code": scanned_code, "method": "qr"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "code_expired"
 
 
 async def test_finished_event_rejects_qr_chat_without_enqueueing(

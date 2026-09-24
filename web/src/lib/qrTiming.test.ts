@@ -44,7 +44,7 @@ describe('estimateClockOffset', () => {
 
   it('treats the whole-second Date header as a lower bound, never refreshing early', () => {
     // The header is truncated, so the real server time is up to a second later and the real
-    // offset up to a second smaller. Overstating the offset delays the refresh — the safe way.
+    // offset up to a second smaller. Overstating the offset prevents an early same-window fetch.
     const serverDate = WINDOW_START + 4_000;
     const trueServerNow = serverDate + 999;
     const receivedAt = trueServerNow + 120_000;

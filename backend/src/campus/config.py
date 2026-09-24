@@ -99,7 +99,6 @@ class Settings(DatabaseSettings):
     ] = frozenset()
     public_web_url: Annotated[str | None, BeforeValidator(_empty_to_none)] = None
     checkin_code_step_seconds: int = Field(default=10, gt=0, le=3600)
-    checkin_code_tolerance_steps: int = Field(default=2, ge=0, le=100)
     # §10: MAX recommends about an hour. A day of replay window buys the mini-app nothing
     # and widens the time a leaked initData stays usable.
     init_data_ttl_seconds: int = Field(default=3600, gt=0)

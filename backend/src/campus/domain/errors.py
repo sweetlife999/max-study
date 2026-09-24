@@ -236,7 +236,7 @@ class InvalidCodeError(DomainError):
 
 
 class CodeExpiredError(DomainError):
-    """Genuine, but from a window older than the tolerance (§5): tell the user to scan again."""
+    """Genuine, but from an expired window (§5): tell the user to scan again."""
 
     code = "code_expired"
     http_status = 400

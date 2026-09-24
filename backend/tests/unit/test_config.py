@@ -138,7 +138,6 @@ def test_settings_defaults_and_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.admin_max_user_ids == frozenset({101, 202, 303})
     assert settings.max_api_base_url == "https://platform-api2.max.ru"
     assert settings.checkin_code_step_seconds == 10
-    assert settings.checkin_code_tolerance_steps == 2
     # §10: the MAX recommendation is about an hour, not a day.
     assert settings.init_data_ttl_seconds == 3600
     assert settings.log_level == "INFO"
@@ -168,7 +167,6 @@ def test_settings_empty_admin_list_and_missing_token(monkeypatch: pytest.MonkeyP
         ("ADMIN_MAX_USER_IDS", "12,abc"),
         ("ADMIN_MAX_USER_IDS", "-5"),
         ("CHECKIN_CODE_STEP_SECONDS", "0"),
-        ("CHECKIN_CODE_TOLERANCE_STEPS", "-1"),
         ("INIT_DATA_TTL_SECONDS", "0"),
         ("LOG_LEVEL", "LOUD"),
         ("DATABASE_URL", "mysql://u:p@db/campus"),

@@ -40,7 +40,7 @@ function OrgEventDetails({ event }: { event: Event }) {
 
       <section className="panel full-width" aria-labelledby="checkin-open-heading">
         <Flex direction="column" gap={8} align="stretch" className="full-width">
-          <Flex align="center" justify="space-between" gap={12}>
+          <label className="checkin-toggle">
             <Typography.Label variant="medium-strong" asChild>
               <span id="checkin-open-heading">{t('org.checkinOpen')}</span>
             </Typography.Label>
@@ -52,7 +52,7 @@ function OrgEventDetails({ event }: { event: Event }) {
                 update.mutate({ checkin_open: changeEvent.target.checked });
               }}
             />
-          </Flex>
+          </label>
           <Typography.Body variant="small" className="muted">
             {isFinished ? t('org.eventFinishedHint') : t('org.checkinOpenHint')}
           </Typography.Body>

@@ -49,6 +49,7 @@ class Actor:
     session: AsyncSession
     config: DomainConfig
     clock: Clock
+    init_data: InitData
 
     @property
     def users(self) -> UserService:
@@ -76,7 +77,7 @@ async def actor(
         lang=verified.user.language_code,
     )
     request.state.lang = user.lang
-    return Actor(user, unit, config, clock)
+    return Actor(user, unit, config, clock, verified)
 
 
 async def consenting(person: Annotated[Actor, Depends(actor, scope="function")]) -> Actor:

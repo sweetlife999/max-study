@@ -313,6 +313,7 @@ async def test_upload_image_asks_for_an_url_then_posts_the_bytes() -> None:
 
     assert rec.requests[0].url.params["type"] == "image"
     assert rec.requests[1].url.host == "iu.oneme.ru"
+    assert rec.requests[1].url.params["x"] == "1"
     assert b"\x89PNG" in rec.requests[1].content
     assert payload.to_payload() == {"token": "tok-9"}
 

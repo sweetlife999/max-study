@@ -14,7 +14,12 @@ from campus.domain.clock import Clock
 from campus.domain.context import DomainConfig
 from campus.domain.services import EventService, QrDisplayService, UserService
 from campus.i18n import translator
-from campus.max.client import MaxAuthError, MaxClient, MaxRateLimitError
+from campus.max.client import (
+    MaxAuthError,
+    MaxClient,
+    MaxRateLimitError,
+    api_error_log_fields,
+)
 from campus.max.types import CallbackButton, NewMessageBody, image_from_token, keyboard
 
 logger = logging.getLogger(__name__)
@@ -107,4 +112,11 @@ class QrWorker:
                     max(1.0, exc.retry_after or 5.0) if isinstance(exc, MaxRateLimitError) else 5.0
                 )
                 self.retry_at[display.id] = self.clock.now() + timedelta(seconds=delay)
-                logger.warning("qr_render_failed", extra={"error_type": type(exc).__name__})
+                logger.warning(
+                    "qr_render_failed",
+                    extra={
+                        "error_type": type(exc).__name__,
+                        "qr_display_id": display.id,
+                        **api_error_log_fields(exc),
+                    },
+                )

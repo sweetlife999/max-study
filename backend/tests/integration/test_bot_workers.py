@@ -172,6 +172,30 @@ async def test_qr_failure_does_not_advance_window_and_respects_cooldown(world: W
     assert display.message_id is not None
 
 
+async def test_qr_failure_logs_safe_max_diagnostics(
+    world: World, caplog: pytest.LogCaptureFixture
+) -> None:
+    organizer = await world.organizer()
+    event = await world.open_event_now(organizer=organizer)
+    display = await world.qr_displays.start(
+        event=event, organizer=organizer, max_user_id=organizer.max_user_id
+    )
+    client = FakeMaxClient()
+    client.fail_next(
+        "upload_image",
+        MaxApiError(400, "private", code="bad_attachment", method="POST /uploads"),
+    )
+
+    await QrWorker(client, world.config, world.clock).tick(world.session)
+
+    record = next(record for record in caplog.records if record.message == "qr_render_failed")
+    assert record.__dict__["qr_display_id"] == display.id
+    assert record.__dict__["http_status"] == 400
+    assert record.__dict__["max_method"] == "POST /uploads"
+    assert record.__dict__["max_error_code"] == "bad_attachment"
+    assert "private" not in record.__dict__.values()
+
+
 async def test_all_outbox_notifications_and_qr_start(world: World) -> None:
     organizer = await world.organizer()
     event = await world.open_event_now(organizer=organizer)

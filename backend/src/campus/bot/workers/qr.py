@@ -20,7 +20,7 @@ from campus.max.client import (
     MaxRateLimitError,
     api_error_log_fields,
 )
-from campus.max.types import CallbackButton, NewMessageBody, image_from_token, keyboard
+from campus.max.types import CallbackButton, ImageAttachment, NewMessageBody, keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class QrWorker:
         user = await UserService(session, self.config, self.clock).require(display.organizer_id)
         view = await events.view(event)
         code = events.current_code(event)
-        token = await self.client.upload_image(content=qr_png(code.deeplink))
+        image_payload = await self.client.upload_image(content=qr_png(code.deeplink))
         text = translator().text(
             user.lang,
             "bot.qr_caption",
@@ -65,7 +65,7 @@ class QrWorker:
         body = NewMessageBody(
             text=text[:4000],
             attachments=[
-                image_from_token(token),
+                ImageAttachment(payload=image_payload),
                 keyboard(
                     [
                         [

@@ -309,12 +309,12 @@ async def test_upload_image_asks_for_an_url_then_posts_the_bytes() -> None:
     )
     client = make_client(rec)
 
-    token = await client.upload_image(content=b"\x89PNG")
+    payload = await client.upload_image(content=b"\x89PNG")
 
     assert rec.requests[0].url.params["type"] == "image"
     assert rec.requests[1].url.host == "iu.oneme.ru"
     assert b"\x89PNG" in rec.requests[1].content
-    assert token == "tok-9"
+    assert payload.to_payload() == {"token": "tok-9"}
 
 
 async def test_upload_never_sends_the_bot_token_to_the_upload_host() -> None:
@@ -336,23 +336,25 @@ async def test_upload_falls_back_to_the_token_from_the_first_response() -> None:
     )
     client = make_client(rec)
 
-    assert await client.upload_image(content=b"png") == "early"
+    assert (await client.upload_image(content=b"png")).to_payload() == {"token": "early"}
 
 
-async def test_upload_extracts_token_from_the_documented_nested_photos_response() -> None:
+async def test_upload_preserves_the_documented_nested_photos_response() -> None:
     rec = Recorder(
         httpx.Response(200, json={"url": "https://iu.oneme.ru/u"}),
         httpx.Response(
             200,
-            json={"photos": {"photo-123": {"token": "mediafile_token"}}},
+            json={"photos": {"photo-123": {"token": "mediafile_token", "width": 256}}},
         ),
     )
     client = make_client(rec)
 
-    assert await client.upload_image(content=b"png") == "mediafile_token"
+    assert (await client.upload_image(content=b"png")).to_payload() == {
+        "photos": {"photo-123": {"token": "mediafile_token", "width": 256}}
+    }
 
 
-async def test_upload_rejects_ambiguous_top_level_and_nested_tokens() -> None:
+async def test_upload_prefers_the_image_photos_map_over_a_compatibility_token() -> None:
     rec = Recorder(
         httpx.Response(200, json={"url": "https://iu.oneme.ru/u"}),
         httpx.Response(
@@ -362,8 +364,9 @@ async def test_upload_rejects_ambiguous_top_level_and_nested_tokens() -> None:
     )
     client = make_client(rec)
 
-    with pytest.raises(MaxApiError, match="ambiguous"):
-        await client.upload_image(content=b"png")
+    assert (await client.upload_image(content=b"png")).to_payload() == {
+        "photos": {"photo-123": {"token": "nested"}}
+    }
 
 
 @pytest.mark.parametrize(
@@ -375,7 +378,6 @@ async def test_upload_rejects_ambiguous_top_level_and_nested_tokens() -> None:
         {"photos": {"photo-123": {"token": ""}}},
         {"photos": {"photo-123": {"token": 42}}},
         {"photos": {"photo-123": {}}},
-        {"photos": {"photo-123": {"token": "one"}, "photo-456": {"token": "two"}}},
         {"photos": []},
     ],
 )
@@ -388,7 +390,7 @@ async def test_upload_rejects_malformed_or_ambiguous_token_responses(
     )
     client = make_client(rec)
 
-    with pytest.raises(MaxApiError, match="token"):
+    with pytest.raises(MaxApiError, match="malformed"):
         await client.upload_image(content=b"png")
 
 

@@ -237,10 +237,11 @@ class InlineKeyboardAttachment(_Out):
 
 
 class ImagePayload(_Out):
-    """Either a token from POST /uploads or a direct URL (images only)."""
+    """A token, direct URL, or the uploaded ``photos`` map returned for images."""
 
     token: str | None = None
     url: str | None = None
+    photos: dict[str, dict[str, Any]] | None = None
 
 
 class ImageAttachment(_Out):

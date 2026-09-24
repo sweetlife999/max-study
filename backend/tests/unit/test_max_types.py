@@ -4,6 +4,7 @@ from campus.max.types import (
     BotStartedUpdate,
     CallbackButton,
     ImageAttachment,
+    ImagePayload,
     LinkButton,
     Message,
     MessageCallbackUpdate,
@@ -202,4 +203,17 @@ def test_image_attachment_references_an_upload_token() -> None:
 
     assert NewMessageBody(attachments=[attachment]).to_payload()["attachments"] == [
         {"type": "image", "payload": {"token": "tok-1"}}
+    ]
+
+
+def test_image_attachment_preserves_uploaded_photos() -> None:
+    attachment = ImageAttachment(
+        payload=ImagePayload(photos={"photo-id": {"token": "tok-1", "width": 256}})
+    )
+
+    assert NewMessageBody(attachments=[attachment]).to_payload()["attachments"] == [
+        {
+            "type": "image",
+            "payload": {"photos": {"photo-id": {"token": "tok-1", "width": 256}}},
+        }
     ]

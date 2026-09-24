@@ -11,6 +11,7 @@ from typing import Any
 from campus.max.client import DEFAULT_POLL_LIMIT, DEFAULT_POLL_TIMEOUT_SECONDS, MaxError
 from campus.max.types import (
     BotInfo,
+    ImagePayload,
     Message,
     MessageBody,
     NewMessageBody,
@@ -165,10 +166,10 @@ class FakeMaxClient:
 
     async def upload_image(
         self, *, content: bytes, filename: str = "image.png", content_type: str = "image/png"
-    ) -> str:
+    ) -> ImagePayload:
         self._record("upload_image", content=content, filename=filename, content_type=content_type)
         self.uploaded.append(content)
-        return self.upload_token
+        return ImagePayload(token=self.upload_token)
 
     async def aclose(self) -> None:
         self._record("aclose")

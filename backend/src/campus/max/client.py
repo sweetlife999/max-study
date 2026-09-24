@@ -7,7 +7,7 @@ test ever touches the network (ARCHITECTURE.md §11).
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
-from campus.max.types import BotInfo, Message, NewMessageBody, UpdatesPage
+from campus.max.types import BotInfo, ImagePayload, Message, NewMessageBody, UpdatesPage
 
 DEFAULT_POLL_TIMEOUT_SECONDS = 30
 DEFAULT_POLL_LIMIT = 100
@@ -144,8 +144,8 @@ class MaxClient(Protocol):
 
     async def upload_image(
         self, *, content: bytes, filename: str = "image.png", content_type: str = "image/png"
-    ) -> str:
-        """POST /uploads?type=image, then PUT the bytes; returns the attachment token."""
+    ) -> ImagePayload:
+        """Upload an image and return the payload MAX expects in an image attachment."""
         ...
 
     async def aclose(self) -> None:

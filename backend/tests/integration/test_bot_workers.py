@@ -23,6 +23,11 @@ async def test_qr_rotates_once_per_window_and_stops(world: World) -> None:
     await worker.tick(world.session)
     assert client.uploaded[0].startswith(b"\x89PNG\r\n\x1a\n")
     assert len(client.sent) == 1
+    assert client.sent[0].body.attachments is not None
+    assert client.sent[0].body.attachments[0].to_payload() == {
+        "type": "image",
+        "payload": {"token": client.upload_token},
+    }
     assert display.message_id == client.sent[0].message_id
     await worker.tick(world.session)
     assert len(client.uploaded) == 1

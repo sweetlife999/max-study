@@ -12,9 +12,8 @@ Verified against https://dev.max.ru/docs-api on 2026-09-18:
   ``{success, message}``;
 * ``POST /answers`` takes ``callback_id`` as a query parameter;
 * ``POST /uploads?type=image`` answers ``{url, token?}``; the bytes are then posted to that URL
-  as multipart ``data``. The current upload response is
-  ``{"photos": {"<photoId>": {"token": "mediafile_token"}}}``; older responses may use a
-  top-level ``{"token": "..."}``.
+  as multipart ``data``. The current image response is a ``photos`` map that must be passed to
+  the image attachment unchanged; older responses may use a top-level ``token``.
 
 TLS: the Russian Trusted Root CA that signs platform-api2.max.ru is *added* to the system trust
 store. Verification is never disabled.
@@ -44,6 +43,7 @@ from campus.max.types import (
     UPDATES_MAX_LIMIT,
     UPDATES_MAX_TIMEOUT_SECONDS,
     BotInfo,
+    ImagePayload,
     Message,
     NewMessageBody,
     SimpleResult,
@@ -353,7 +353,7 @@ class HttpMaxClient:
 
     async def upload_image(
         self, *, content: bytes, filename: str = "image.png", content_type: str = "image/png"
-    ) -> str:
+    ) -> ImagePayload:
         target = UploadTarget.model_validate(
             await self._request("POST", "/uploads", params={"type": "image"})
         )
@@ -365,13 +365,14 @@ class HttpMaxClient:
             client=self._uploads,
         )
         try:
-            uploaded_token = _extract_upload_token(uploaded)
+            payload = _extract_image_payload(uploaded)
         except ValueError as exc:
             raise MaxApiError(200, str(exc), method="POST /uploads") from exc
-        token = uploaded_token if uploaded_token is not None else target.token
-        if not isinstance(token, str) or not token:
-            raise MaxApiError(200, "upload did not return a token", method="POST /uploads")
-        return token
+        if payload is not None:
+            return payload
+        if isinstance(target.token, str) and target.token:
+            return ImagePayload(token=target.token)
+        raise MaxApiError(200, "upload did not return a token", method="POST /uploads")
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -384,37 +385,30 @@ def _require_one_destination(user_id: int | None, chat_id: int | None) -> None:
         raise ValueError(msg)
 
 
-def _extract_upload_token(payload: object) -> str | None:
-    """Extract one token from an upload response without accepting ambiguous data."""
+def _extract_image_payload(payload: object) -> ImagePayload | None:
+    """Preserve MAX's image ``photos`` map; accept the older token response as fallback."""
     if not isinstance(payload, Mapping):
         raise ValueError("upload returned malformed token data")
 
-    has_top_level = "token" in payload
-    has_photos = "photos" in payload
-    if has_top_level and has_photos:
-        raise ValueError("upload returned ambiguous token data")
-    if has_top_level:
+    if "photos" in payload:
+        photos = payload["photos"]
+        if not isinstance(photos, Mapping) or not photos:
+            raise ValueError("upload returned malformed photos data")
+        normalized: dict[str, dict[str, Any]] = {}
+        for photo_id, photo in photos.items():
+            if not isinstance(photo_id, str) or not photo_id or not isinstance(photo, Mapping):
+                raise ValueError("upload returned malformed photos data")
+            token = photo.get("token")
+            if not isinstance(token, str) or not token:
+                raise ValueError("upload returned malformed photos data")
+            normalized[photo_id] = dict(photo)
+        return ImagePayload(photos=normalized)
+    if "token" in payload:
         token = payload["token"]
         if not isinstance(token, str) or not token:
             raise ValueError("upload returned malformed token data")
-        return token
-    if not has_photos:
-        return None
-
-    photos = payload["photos"]
-    if not isinstance(photos, Mapping) or not photos:
-        raise ValueError("upload returned malformed token data")
-    tokens: list[str] = []
-    for photo in photos.values():
-        if not isinstance(photo, Mapping):
-            raise ValueError("upload returned malformed token data")
-        token = photo.get("token")
-        if not isinstance(token, str) or not token:
-            raise ValueError("upload returned malformed token data")
-        tokens.append(token)
-    if len(tokens) != 1:
-        raise ValueError("upload returned ambiguous token data")
-    return tokens[0]
+        return ImagePayload(token=token)
+    return None
 
 
 def _chat_key(user_id: int | None, chat_id: int | None) -> str:

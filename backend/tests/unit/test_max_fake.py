@@ -69,13 +69,13 @@ async def test_edits_deletes_answers_and_uploads_are_recorded() -> None:
     await client.edit_message(message_id="m1", body=NewMessageBody(text="new"))
     await client.delete_message(message_id="m2")
     await client.answer_callback(callback_id="cb", notification="ok")
-    token = await client.upload_image(content=b"png")
+    payload = await client.upload_image(content=b"png")
 
     assert client.edited["m1"].text == "new"
     assert client.deleted == ["m2"]
     assert client.answered == [("cb", None, "ok")]
     assert client.uploaded == [b"png"]
-    assert token == client.upload_token
+    assert payload.token == client.upload_token
 
 
 async def test_empty_callback_answer_is_rejected() -> None:

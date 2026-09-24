@@ -105,22 +105,34 @@ jobs:
                   max_attempts=1,
               )
               try:
-                  target = UploadTarget.model_validate(
-                      await client._request("POST", "/uploads", params={"type": "image"})
-                  )
-                  response = await client._uploads.post(
-                      target.url,
-                      files={"data": ("probe.png", qr_png("https://example.invalid"), "image/png")},
-                  )
-                  print(f"http_status={response.status_code}")
-                  print(f"content_type={response.headers.get('content-type', '').split(';', 1)[0]}")
-                  print(f"content_length={len(response.content)}")
+                  for label, authorization in (("anonymous", None), ("authorized", os.environ["MAX_BOT_TOKEN"])):
+                      target = UploadTarget.model_validate(
+                          await client._request("POST", "/uploads", params={"type": "image"})
+                      )
+                      headers = {"Authorization": authorization} if authorization else None
+                      response = await client._uploads.post(
+                          target.url,
+                          files={
+                              "data": (
+                                  f"probe-{label}.png",
+                                  qr_png(f"https://example.invalid/{label}"),
+                                  "image/png",
+                              )
+                          },
+                          headers=headers,
+                      )
+                      print(f"probe={label}")
+                      print(f"http_status={response.status_code}")
+                      print(f"content_type={response.headers.get('content-type', '').split(';', 1)[0]}")
+                      print(f"content_length={len(response.content)}")
+                      try:
+                          describe(response.json())
+                      except ValueError:
+                          print("json_type=invalid")
                   try:
-                      describe(response.json())
-                  except ValueError:
-                      print("json_type=invalid")
-                  try:
-                      payload = await client.upload_image(content=qr_png("https://example.invalid"))
+                      payload = await client.upload_image(
+                          content=qr_png("https://example.invalid/client")
+                      )
                   except MaxApiError as error:
                       known_messages = {
                           "upload returned malformed token data": "malformed_token",

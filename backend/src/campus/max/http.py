@@ -142,7 +142,8 @@ class HttpMaxClient:
             transport=transport,
             follow_redirects=False,
         )
-        # The upload host (iu.oneme.ru) is a different origin: it must never see the bot token.
+        # The upload host is a different origin and gets credentials only after its host is
+        # validated by ``upload_image``.
         self._uploads = httpx.AsyncClient(
             timeout=httpx.Timeout(UPLOAD_TIMEOUT_SECONDS),
             verify=verify,
@@ -178,7 +179,9 @@ class HttpMaxClient:
                 response = await (client or self._client).request(
                     method,
                     url,
-                    params=dict(params or {}),
+                    # Passing an empty mapping makes httpx discard a query string already
+                    # present in an absolute URL. MAX signs its CDN upload URL in that query.
+                    params=dict(params) if params is not None else None,
                     json=json,
                     files=files,
                     headers=dict(headers or {}),

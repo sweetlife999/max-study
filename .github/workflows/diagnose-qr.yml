@@ -64,6 +64,7 @@ jobs:
           from collections.abc import Mapping, Sequence
 
           from campus.bot.workers.qr import qr_png
+          from campus.max.client import MaxApiError
           from campus.max.http import HttpMaxClient
           from campus.max.types import UploadTarget
 
@@ -118,6 +119,22 @@ jobs:
                       describe(response.json())
                   except ValueError:
                       print("json_type=invalid")
+                  try:
+                      payload = await client.upload_image(content=qr_png("https://example.invalid"))
+                  except MaxApiError as error:
+                      known_messages = {
+                          "upload returned malformed token data": "malformed_token",
+                          "upload returned malformed photos data": "malformed_photos",
+                          "upload did not return a token": "missing_token",
+                      }
+                      print("upload_image_result=error")
+                      print(f"upload_image_method={error.method}")
+                      print(f"upload_image_status={error.status_code}")
+                      print(f"upload_image_category={known_messages.get(error.message, 'other')}")
+                  else:
+                      print("upload_image_result=success")
+                      print(f"upload_payload_has_photos={payload.photos is not None}")
+                      print(f"upload_payload_has_token={payload.token is not None}")
               finally:
                   await client.aclose()
 

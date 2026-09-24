@@ -12,7 +12,9 @@ Verified against https://dev.max.ru/docs-api on 2026-09-18:
   ``{success, message}``;
 * ``POST /answers`` takes ``callback_id`` as a query parameter;
 * ``POST /uploads?type=image`` answers ``{url, token?}``; the bytes are then posted to that URL
-  as multipart ``data``, which answers ``{token}``.
+  as multipart ``data``. The current upload response is
+  ``{"photos": {"<photoId>": {"token": "mediafile_token"}}}``; older responses may use a
+  top-level ``{"token": "..."}``.
 
 TLS: the Russian Trusted Root CA that signs platform-api2.max.ru is *added* to the system trust
 store. Verification is never disabled.
@@ -362,8 +364,11 @@ class HttpMaxClient:
             timeout=httpx.Timeout(UPLOAD_TIMEOUT_SECONDS),
             client=self._uploads,
         )
-        token = uploaded.get("token") if isinstance(uploaded, Mapping) else None
-        token = token or target.token
+        try:
+            uploaded_token = _extract_upload_token(uploaded)
+        except ValueError as exc:
+            raise MaxApiError(200, str(exc), method="POST /uploads") from exc
+        token = uploaded_token if uploaded_token is not None else target.token
         if not isinstance(token, str) or not token:
             raise MaxApiError(200, "upload did not return a token", method="POST /uploads")
         return token
@@ -377,6 +382,39 @@ def _require_one_destination(user_id: int | None, chat_id: int | None) -> None:
     if (user_id is None) == (chat_id is None):
         msg = "exactly one of user_id or chat_id must be given"
         raise ValueError(msg)
+
+
+def _extract_upload_token(payload: object) -> str | None:
+    """Extract one token from an upload response without accepting ambiguous data."""
+    if not isinstance(payload, Mapping):
+        raise ValueError("upload returned malformed token data")
+
+    has_top_level = "token" in payload
+    has_photos = "photos" in payload
+    if has_top_level and has_photos:
+        raise ValueError("upload returned ambiguous token data")
+    if has_top_level:
+        token = payload["token"]
+        if not isinstance(token, str) or not token:
+            raise ValueError("upload returned malformed token data")
+        return token
+    if not has_photos:
+        return None
+
+    photos = payload["photos"]
+    if not isinstance(photos, Mapping) or not photos:
+        raise ValueError("upload returned malformed token data")
+    tokens: list[str] = []
+    for photo in photos.values():
+        if not isinstance(photo, Mapping):
+            raise ValueError("upload returned malformed token data")
+        token = photo.get("token")
+        if not isinstance(token, str) or not token:
+            raise ValueError("upload returned malformed token data")
+        tokens.append(token)
+    if len(tokens) != 1:
+        raise ValueError("upload returned ambiguous token data")
+    return tokens[0]
 
 
 def _chat_key(user_id: int | None, chat_id: int | None) -> str:

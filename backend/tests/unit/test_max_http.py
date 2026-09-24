@@ -317,7 +317,7 @@ async def test_upload_image_asks_for_an_url_then_posts_the_bytes() -> None:
     assert payload.to_payload() == {"token": "tok-9"}
 
 
-async def test_upload_never_sends_the_bot_token_to_the_upload_host() -> None:
+async def test_upload_sends_authorization_only_to_the_trusted_max_image_host() -> None:
     rec = Recorder(
         httpx.Response(200, json={"url": "https://iu.oneme.ru/upload.do"}),
         httpx.Response(200, json={"token": "tok-9"}),
@@ -326,7 +326,25 @@ async def test_upload_never_sends_the_bot_token_to_the_upload_host() -> None:
 
     await client.upload_image(content=b"png")
 
-    assert "Authorization" not in rec.requests[1].headers
+    assert rec.requests[1].headers["Authorization"] == TOKEN
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://iu.oneme.ru/upload.do",
+        "https://evil.example/upload.do",
+        "https://iu.oneme.ru.evil.example/upload.do",
+    ],
+)
+async def test_upload_rejects_untrusted_targets_before_sending_bytes(url: str) -> None:
+    rec = Recorder(httpx.Response(200, json={"url": url}))
+    client = make_client(rec)
+
+    with pytest.raises(MaxApiError, match="untrusted"):
+        await client.upload_image(content=b"png")
+
+    assert len(rec.requests) == 1
 
 
 async def test_upload_falls_back_to_the_token_from_the_first_response() -> None:

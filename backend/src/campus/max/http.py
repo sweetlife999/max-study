@@ -160,6 +160,7 @@ class HttpMaxClient:
         params: Mapping[str, Any] | None = None,
         json: Any = None,
         files: Any = None,
+        headers: Mapping[str, str] | None = None,
         chat_key: str | None = None,
         timeout: httpx.Timeout | None = None,  # noqa: ASYNC109 - httpx timeout, not asyncio
         client: httpx.AsyncClient | None = None,
@@ -180,6 +181,7 @@ class HttpMaxClient:
                     params=dict(params or {}),
                     json=json,
                     files=files,
+                    headers=dict(headers or {}),
                     timeout=timeout,
                 )
             except httpx.HTTPError as exc:
@@ -357,10 +359,12 @@ class HttpMaxClient:
         target = UploadTarget.model_validate(
             await self._request("POST", "/uploads", params={"type": "image"})
         )
+        _require_trusted_image_upload_url(target.url)
         uploaded = await self._request(
             "POST",
             target.url,
             files={"data": (filename, content, content_type)},
+            headers={"Authorization": self._token},
             timeout=httpx.Timeout(UPLOAD_TIMEOUT_SECONDS),
             client=self._uploads,
         )
@@ -383,6 +387,13 @@ def _require_one_destination(user_id: int | None, chat_id: int | None) -> None:
     if (user_id is None) == (chat_id is None):
         msg = "exactly one of user_id or chat_id must be given"
         raise ValueError(msg)
+
+
+def _require_trusted_image_upload_url(url: str) -> None:
+    """The bot token may leave the API origin only for MAX's documented image upload host."""
+    parsed = httpx.URL(url)
+    if parsed.scheme != "https" or parsed.host not in {"iu.oneme.ru", "iusmile.oneme.ru"}:
+        raise MaxApiError(200, "untrusted image upload URL", method="POST /uploads")
 
 
 def _extract_image_payload(payload: object) -> ImagePayload | None:

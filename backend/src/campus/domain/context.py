@@ -17,10 +17,13 @@ if TYPE_CHECKING:  # pragma: no cover - import only needed for the adapter below
 CHECKIN_WINDOW_MARGIN = timedelta(minutes=30)
 CHECKIN_RATE_LIMIT_ATTEMPTS = 10
 CHECKIN_RATE_LIMIT_WINDOW = timedelta(minutes=10)
+# A MAX-signed direct launch proves when this exact QR was opened. Keep a short allowance for
+# loading the mini-app and sending the request without extending the QR code's own lifetime.
+CHECKIN_QR_SUBMIT_GRACE = timedelta(seconds=30)
 
 # §7 separates `invalid_code` from `code_expired`. This is how far back a code is still recognised
-# as this event's own, only stale — long enough to cover a slow scan-to-request round trip. It
-# changes the *message*, never what is accepted: that stays CHECKIN_CODE_TOLERANCE_STEPS (§5).
+# as this event's own, only stale, so the client can tell the student to scan again. Recognition
+# never makes an old code valid: only the current window is accepted (§5).
 CHECKIN_CODE_EXPIRED_LOOKBACK = timedelta(minutes=2)
 
 # ARCHITECTURE.md §8.
@@ -38,7 +41,6 @@ class DomainConfig:
     university: UniversityConfig
     admin_max_user_ids: frozenset[int] = frozenset()
     checkin_code_step_seconds: int = 10
-    checkin_code_tolerance_steps: int = 2
     bot_username: str | None = None
     invite_ttl: timedelta = DEFAULT_INVITE_TTL
 
@@ -48,7 +50,6 @@ class DomainConfig:
             university=university,
             admin_max_user_ids=settings.admin_max_user_ids,
             checkin_code_step_seconds=settings.checkin_code_step_seconds,
-            checkin_code_tolerance_steps=settings.checkin_code_tolerance_steps,
             bot_username=settings.max_bot_username,
         )
 
@@ -57,9 +58,8 @@ class DomainConfig:
         """:data:`CHECKIN_CODE_EXPIRED_LOOKBACK` expressed in code windows, rounded up."""
         step = self.checkin_code_step_seconds
         if step <= 0:  # pragma: no cover - Settings rejects it, a hand-built config might not
-            return self.checkin_code_tolerance_steps
-        whole_steps = -(-int(CHECKIN_CODE_EXPIRED_LOOKBACK.total_seconds()) // step)
-        return max(self.checkin_code_tolerance_steps, whole_steps)
+            return 0
+        return -(-int(CHECKIN_CODE_EXPIRED_LOOKBACK.total_seconds()) // step)
 
     @property
     def default_language(self) -> str:

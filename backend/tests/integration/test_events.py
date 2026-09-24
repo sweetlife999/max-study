@@ -311,26 +311,21 @@ async def test_the_code_is_refused_while_check_in_is_closed(world: World) -> Non
         world.events.current_code(event)
 
 
-async def test_a_code_from_a_previous_window_is_still_accepted(world: World) -> None:
+async def test_a_code_from_a_previous_window_is_refused(world: World) -> None:
     organizer = await world.organizer()
     event = await world.open_event_now(organizer=organizer)
     code = world.code_for(event)
 
     world.clock.advance(timedelta(seconds=world.config.checkin_code_step_seconds))
 
-    assert world.events.verify_code(event, code) is True
+    assert world.events.verify_code(event, code) is False
 
 
-async def test_a_code_older_than_the_tolerance_is_refused(world: World) -> None:
+async def test_a_code_from_the_current_window_is_accepted(world: World) -> None:
     organizer = await world.organizer()
     event = await world.open_event_now(organizer=organizer)
     code = world.code_for(event)
-    step = world.config.checkin_code_step_seconds
-    tolerance = world.config.checkin_code_tolerance_steps
-
-    world.clock.advance(timedelta(seconds=step * (tolerance + 1)))
-
-    assert world.events.verify_code(event, code) is False
+    assert world.events.verify_code(event, code) is True
 
 
 async def test_another_events_code_is_refused(world: World) -> None:

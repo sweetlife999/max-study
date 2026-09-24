@@ -7,10 +7,9 @@
  *
  * 1. If the HTTP `Date` header is readable, it is the server clock truncated to whole seconds,
  *    i.e. a *lower bound* on the server time. Using the bound as-is biases the refresh late
- *    rather than early, which is the safe direction: a code fetched too early belongs to the
- *    window we already show, while a code fetched up to a second late is still accepted by the
- *    backend (§5 tolerates `CHECKIN_CODE_TOLERANCE_STEPS` past windows). The bound is clamped
- *    into `[window_started_at, expires_at)`, which must contain the server time.
+ *    rather than early: a code fetched too early belongs to the window we already show, while
+ *    one fetched just after expiry is rejected by the backend and replaced by this refresh.
+ *    The bound is clamped into `[window_started_at, expires_at)`, which must contain server time.
  * 2. Otherwise, if the local clock already falls inside the window, it is trusted (offset 0).
  * 3. Otherwise the local clock is off; assume the server was at the window start. Refetches are
  *    scheduled at window boundaries, so after the first request this is accurate.

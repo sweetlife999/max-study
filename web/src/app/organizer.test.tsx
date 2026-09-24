@@ -179,13 +179,14 @@ describe('managing an event', () => {
     expect(container.querySelector('.org-event-screen > .panel')).toHaveClass('full-width');
   });
 
-  it('switches check-in from the switch control without a label hit area', async () => {
+  it('uses the whole labeled row as the check-in switch hit area', async () => {
     const { user } = renderApp({ route: `/org/events/${CLOSED_EVENT_ID}` });
 
     const toggle = await screen.findByRole('switch', { name: 'Отметка открыта' });
-    expect(toggle).not.toHaveAttribute('id');
-    expect(toggle.closest('label')).toBeNull();
-    await user.click(toggle);
+    const label = screen.getByText('Отметка открыта').closest('label');
+    expect(label).toBeInTheDocument();
+    expect(label).toHaveClass('checkin-toggle');
+    await user.click(screen.getByText('Отметка открыта'));
 
     await waitFor(() => {
       expect(toggle).toBeChecked();

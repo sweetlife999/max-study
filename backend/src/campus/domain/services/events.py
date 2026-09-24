@@ -256,7 +256,7 @@ class EventService(Service):
             code,
             now=now or self.now(),
             step_seconds=self.config.checkin_code_step_seconds,
-            tolerance_steps=self.config.checkin_code_tolerance_steps,
+            tolerance_steps=0,
         )
 
     def classify_code(
@@ -269,7 +269,7 @@ class EventService(Service):
             code,
             now=now or self.now(),
             step_seconds=self.config.checkin_code_step_seconds,
-            tolerance_steps=self.config.checkin_code_tolerance_steps,
+            tolerance_steps=0,
             expired_lookback_steps=self.config.checkin_code_expired_lookback_steps,
         )
 

@@ -7,8 +7,9 @@ Order of checks, deliberately:
 2. code shape;
 3. the event: given explicitly, it must exist, have check-in open and be inside its time window;
    given as a bare code, only events already satisfying all three are searched;
-4. the code itself, in constant time, against the accepted windows; a code that only just went
-   stale is told apart from a wrong one, because §7 gives the two different codes;
+4. the code itself, in constant time, at request time or at a recent MAX-signed scan time; a code
+   that was already stale when scanned is told apart from a wrong one, because §7 gives the two
+   different codes;
 5. the check-in row, inserted idempotently — a repeat is ``already=True`` and a 200, not an error.
 
 Every request that got past the rate limit costs exactly one row in ``checkin_attempts``,
@@ -21,13 +22,18 @@ service raises: see :func:`campus.db.session.domain_scope`.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from campus.db.models import CHECKIN_METHODS, Checkin, CheckinAttempt, Event, User
 from campus.domain import codes
-from campus.domain.context import CHECKIN_RATE_LIMIT_ATTEMPTS, CHECKIN_RATE_LIMIT_WINDOW
+from campus.domain.context import (
+    CHECKIN_QR_SUBMIT_GRACE,
+    CHECKIN_RATE_LIMIT_ATTEMPTS,
+    CHECKIN_RATE_LIMIT_WINDOW,
+)
 from campus.domain.errors import (
     AmbiguousCodeError,
     CheckinClosedError,
@@ -124,6 +130,7 @@ class CheckinService(Service):
         code: str,
         method: str,
         event_id: int | None = None,
+        code_observed_at: datetime | None = None,
     ) -> CheckinOutcome:
         # A method the client made up is a malformed request, not a guess: it costs no attempt.
         if method not in CHECKIN_METHODS:
@@ -131,22 +138,42 @@ class CheckinService(Service):
         await self._guard_rate_limit(user.id)
 
         try:
-            event = await self._resolve(code, event_id=event_id)
+            event = await self._resolve(
+                code,
+                event_id=event_id,
+                code_observed_at=code_observed_at if method == "qr" else None,
+            )
         except DomainError:
             await self._record_attempt(user.id, success=False)
             raise
         await self._record_attempt(user.id, success=True)
         return await self._register(user=user, event=event, method=method)
 
-    async def _resolve(self, code: str, *, event_id: int | None) -> Event:
+    async def _resolve(
+        self,
+        code: str,
+        *,
+        event_id: int | None,
+        code_observed_at: datetime | None,
+    ) -> Event:
         """Find the event this code checks into, or raise. Records nothing itself."""
         if not codes.is_well_formed(code):
             raise InvalidCodeError("code is not six digits")
         if event_id is not None:
-            return await self._resolve_named_event(event_id, code)
+            return await self._resolve_named_event(
+                event_id,
+                code,
+                code_observed_at=code_observed_at,
+            )
         return await self._resolve_event_by_code(code)
 
-    async def _resolve_named_event(self, event_id: int, code: str) -> Event:
+    async def _resolve_named_event(
+        self,
+        event_id: int,
+        code: str,
+        *,
+        code_observed_at: datetime | None,
+    ) -> Event:
         """The mini-app path: the deep link already said which event it is."""
         event = await self._events.require(event_id)
         now = self.now()
@@ -157,12 +184,26 @@ class CheckinService(Service):
             raise CheckinNotStartedError(f"event {event.id}")
         if state == WINDOW_AFTER:
             raise CheckinWindowOverError(f"event {event.id}")
-        verdict = self._events.classify_code(event, code, now=now)
+        verdict = self._events.classify_code(
+            event,
+            code,
+            now=self._code_verification_time(now, code_observed_at),
+        )
         if verdict == "expired":
             raise CodeExpiredError(f"stale code for event {event.id}")
         if verdict != "valid":
             raise InvalidCodeError(f"code rejected for event {event.id}")
         return event
+
+    @staticmethod
+    def _code_verification_time(now: datetime, observed_at: datetime | None) -> datetime:
+        """Use a recent trusted scan time, never a stale or future timestamp."""
+        if observed_at is None or observed_at.tzinfo is None or observed_at.utcoffset() is None:
+            return now
+        age = now - observed_at
+        if age.total_seconds() < 0 or age > CHECKIN_QR_SUBMIT_GRACE:
+            return now
+        return observed_at
 
     async def _resolve_event_by_code(self, code: str) -> Event:
         """The chat path: a bare six-digit code, matched against every open event (§5)."""
@@ -250,8 +291,20 @@ class CheckinService(Service):
         )
 
     async def check_in_view(
-        self, *, user: User, code: str, method: str, event_id: int | None = None
+        self,
+        *,
+        user: User,
+        code: str,
+        method: str,
+        event_id: int | None = None,
+        code_observed_at: datetime | None = None,
     ) -> CheckinResult:
         """The whole operation as the api returns it (§7 POST /api/checkins)."""
-        outcome = await self.check_in(user=user, code=code, method=method, event_id=event_id)
+        outcome = await self.check_in(
+            user=user,
+            code=code,
+            method=method,
+            event_id=event_id,
+            code_observed_at=code_observed_at,
+        )
         return await self.result_view(outcome, user=user)

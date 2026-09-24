@@ -133,6 +133,19 @@ body {
   width: 100%;
 }
 
+.checkin-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.checkin-toggle:has(input:disabled) {
+  cursor: not-allowed;
+}
+
 .event-info__facts {
   width: 100%;
 }

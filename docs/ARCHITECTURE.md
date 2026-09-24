@@ -77,9 +77,10 @@ compose.yaml, .env.example, .dockerignore, README.md
 - `window = floor(unix_time / STEP)`, `STEP = CHECKIN_CODE_STEP_SECONDS` (default 10).
 - `digest = HMAC-SHA256(qr_seed, b"campus-checkin:" + event_id(8 байт BE) + window(8 байт BE))`.
 - `code` = 6 цифр по схеме dynamic truncation RFC 4226 от `digest`, с ведущими нулями.
-- Принимаются окна `[window - CHECKIN_CODE_TOLERANCE_STEPS, window]` (default 2). Будущие окна — нет. Сравнение — `hmac.compare_digest`.
+- QR должен относиться к текущему окну `[window, window]` в момент сканирования; начать отметку старым QR после `expires_at` нельзя. Будущие окна — нет. Сравнение — `hmac.compare_digest`.
 - `qr_seed` — `secrets.token_bytes(32)`, генерируется при создании события, **никогда не покидает backend** (ни в API-ответах, ни в логах).
 - QR кодирует диплинк: `https://max.ru/{BOT_USERNAME}?startapp=ci_{event_id}_{code}` (сверить формат и лимит длины `startapp` с dev.max.ru/help/deeplinks). Под QR печатается `code` для ввода вручную.
+- Для прямого запуска по QR подписанные MAX `start_param` и `auth_date` подтверждают момент сканирования этого конкретного кода. Сервер допускает до 30 секунд только на загрузку мини-приложения и отправку запроса; это не продлевает срок QR, который был устаревшим уже при сканировании.
 - Отметка возможна, только если `checkin_open = true` и `now ∈ [starts_at - 30 мин, ends_at + 30 мин]`.
 - Rate limit: не более 10 попыток за 10 минут на пользователя (по `checkin_attempts`) → `429`/сообщение «слишком много попыток».
 - Ввод кода в чате без event_id: ищем среди событий с открытой отметкой; 0 совпадений — «неверный или устаревший код»; >1 — предложить выбрать событие кнопками.
@@ -162,7 +163,7 @@ Vite + React + TS + `@maxhub/max-ui`; MAX Bridge подключается стр
 Все состояния: загрузка / пусто / ошибка с повтором. RU/EN. Работает в мобильной и веб-версии MAX.
 
 ## 10. Конфигурация (env)
-`MAX_BOT_TOKEN`, `MAX_BOT_USERNAME`, `MAX_API_BASE_URL` (default `https://platform-api2.max.ru`), `DATABASE_URL`, `UNIVERSITY_CONFIG_PATH`, `ADMIN_MAX_USER_IDS` (через запятую), `PUBLIC_WEB_URL`, `CHECKIN_CODE_STEP_SECONDS`, `CHECKIN_CODE_TOLERANCE_STEPS`, `INIT_DATA_TTL_SECONDS` (default 3600 — рекомендация MAX ≈1 час), `LOG_LEVEL`. Всё — в `.env.example` с комментариями. Секретов в репозитории нет.
+`MAX_BOT_TOKEN`, `MAX_BOT_USERNAME`, `MAX_API_BASE_URL` (default `https://platform-api2.max.ru`), `DATABASE_URL`, `UNIVERSITY_CONFIG_PATH`, `ADMIN_MAX_USER_IDS` (через запятую), `PUBLIC_WEB_URL`, `CHECKIN_CODE_STEP_SECONDS`, `INIT_DATA_TTL_SECONDS` (default 3600 — рекомендация MAX ≈1 час), `LOG_LEVEL`. Всё — в `.env.example` с комментариями. Секретов в репозитории нет.
 
 ## 11. Качество (обязательно для каждой ветки)
 - `uv run ruff check`, `uv run ruff format --check`, `uv run pyright` (strict для `campus.domain`), `uv run pytest` — зелёные; покрытие `campus.domain` ≥ 90%, всего backend ≥ 80%.

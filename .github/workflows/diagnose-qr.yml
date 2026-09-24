@@ -56,4 +56,72 @@ jobs:
           ORDER BY id DESC
           LIMIT 10;
           SQL
+
+          echo 'MAX image upload response shape (values redacted):'
+          "${compose[@]}" exec -T bot python - <<'PY'
+          import asyncio
+          import os
+          from collections.abc import Mapping, Sequence
+
+          from campus.bot.workers.qr import qr_png
+          from campus.max.http import HttpMaxClient
+          from campus.max.types import UploadTarget
+
+
+          def describe(value: object) -> None:
+              print(f"json_type={type(value).__name__}")
+              if not isinstance(value, Mapping):
+                  if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+                      print(f"sequence_length={len(value)}")
+                  return
+              print(f"top_level_keys={sorted(str(key) for key in value)}")
+              token = value.get("token")
+              print(f"top_token_type={type(token).__name__} top_token_nonempty={bool(token)}")
+              photos = value.get("photos")
+              print(f"photos_type={type(photos).__name__}")
+              if isinstance(photos, Mapping):
+                  print(f"photos_count={len(photos)}")
+                  first = next(iter(photos.values()), None)
+              elif isinstance(photos, Sequence) and not isinstance(photos, (str, bytes)):
+                  print(f"photos_count={len(photos)}")
+                  first = photos[0] if photos else None
+              else:
+                  first = None
+              print(f"photo_entry_type={type(first).__name__}")
+              if isinstance(first, Mapping):
+                  print(f"photo_entry_keys={sorted(str(key) for key in first)}")
+                  nested = first.get("token")
+                  print(
+                      f"photo_token_type={type(nested).__name__} "
+                      f"photo_token_nonempty={bool(nested)}"
+                  )
+
+
+          async def main() -> None:
+              client = HttpMaxClient(
+                  os.environ["MAX_BOT_TOKEN"],
+                  base_url=os.environ["MAX_API_BASE_URL"],
+                  max_attempts=1,
+              )
+              try:
+                  target = UploadTarget.model_validate(
+                      await client._request("POST", "/uploads", params={"type": "image"})
+                  )
+                  response = await client._uploads.post(
+                      target.url,
+                      files={"data": ("probe.png", qr_png("https://example.invalid"), "image/png")},
+                  )
+                  print(f"http_status={response.status_code}")
+                  print(f"content_type={response.headers.get('content-type', '').split(';', 1)[0]}")
+                  print(f"content_length={len(response.content)}")
+                  try:
+                      describe(response.json())
+                  except ValueError:
+                      print("json_type=invalid")
+              finally:
+                  await client.aclose()
+
+
+          asyncio.run(main())
+          PY
           REMOTE

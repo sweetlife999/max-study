@@ -5,6 +5,7 @@ import pytest
 from campus.bot.dispatcher import Dispatcher
 from campus.db.models import User
 from campus.domain.context import DomainConfig
+from campus.max.client import MaxApiError, MaxAuthError, MaxTransportError
 from campus.max.fake import FakeMaxClient
 from campus.max.types import BotStartedUpdate, Callback, MessageCallbackUpdate
 from campus.max.types import User as MaxUser
@@ -45,6 +46,45 @@ async def test_protected_callback_requires_consent_and_answers(setup):
         )
     assert len(client.answered) == 1
     assert "согласие" in client.last_sent().text.lower()
+
+
+@pytest.mark.parametrize("error", [MaxApiError(400), MaxApiError(200), MaxTransportError()])
+async def test_consent_survives_callback_acknowledgement_failure(setup, error, caplog):
+    dispatcher, client, session, user = setup
+    with (
+        patch.object(client, "answer_callback", AsyncMock(side_effect=error)),
+        patch("campus.bot.handlers.core.UserService.get_or_create", AsyncMock(return_value=user)),
+        patch("campus.bot.handlers.core.UserService.give_consent", AsyncMock()) as consent,
+        patch("campus.bot.handlers.core.Handler.resume", AsyncMock()) as resume,
+    ):
+        await dispatcher.dispatch(
+            MessageCallbackUpdate(
+                callback=Callback(
+                    callback_id="private", user=MaxUser(user_id=123), payload="consent"
+                )
+            )
+        )
+    consent.assert_awaited_once_with(user)
+    resume.assert_awaited_once_with(user)
+    session.commit.assert_awaited_once()
+    assert client.sent  # Language selection is still delivered.
+    assert "callback_answer_failed" in caplog.text
+    assert "private" not in caplog.text
+
+
+async def test_callback_authentication_failure_does_not_process_action(setup):
+    dispatcher, client, session, _ = setup
+    with (
+        patch.object(client, "answer_callback", AsyncMock(side_effect=MaxAuthError())),
+        pytest.raises(MaxAuthError),
+    ):
+        await dispatcher.dispatch(
+            MessageCallbackUpdate(
+                callback=Callback(callback_id="cb", user=MaxUser(user_id=123), payload="consent")
+            )
+        )
+    session.commit.assert_not_awaited()
+    assert not client.sent
 
 
 async def test_invalid_callback_is_localized(setup):

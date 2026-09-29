@@ -1,5 +1,7 @@
 """Translate MAX updates into domain operations, isolating one transaction per update."""
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from campus.bot.handlers.core import Handler
@@ -8,7 +10,7 @@ from campus.domain.clock import Clock, SystemClock
 from campus.domain.context import DomainConfig
 from campus.domain.errors import DomainError
 from campus.i18n import translator
-from campus.max.client import MaxClient
+from campus.max.client import MaxApiError, MaxAuthError, MaxClient, MaxError
 from campus.max.types import (
     BotStartedUpdate,
     MessageCallbackUpdate,
@@ -16,6 +18,8 @@ from campus.max.types import (
     NewMessageBody,
     Update,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class Dispatcher:
@@ -55,7 +59,21 @@ class Dispatcher:
         if actor is None or actor.is_bot:
             return
         if isinstance(update, MessageCallbackUpdate):
-            await self.client.answer_callback(callback_id=update.callback.callback_id)
+            try:
+                await self.client.answer_callback(callback_id=update.callback.callback_id)
+            except MaxAuthError:
+                raise
+            except MaxError as exc:
+                # Acknowledging the UI must not prevent the authenticated user's action.
+                # MAX may reject an empty answer or an expired callback identifier.
+                logger.warning(
+                    "callback_answer_failed",
+                    extra={
+                        "error_type": type(exc).__name__,
+                        "max_method": "POST /answers",
+                        "max_status": exc.status_code if isinstance(exc, MaxApiError) else None,
+                    },
+                )
         handler: Handler | None = None
         try:
             async with domain_scope(self.session_factory) as session:

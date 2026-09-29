@@ -11,7 +11,7 @@ from campus.domain.clock import Clock
 from campus.domain.context import DomainConfig
 from campus.domain.services import EventService, OutboxService, QrDisplayService, UserService
 from campus.i18n import translator
-from campus.max.client import MaxAuthError, MaxClient, MaxRateLimitError
+from campus.max.client import MaxApiError, MaxAuthError, MaxClient, MaxRateLimitError
 from campus.max.types import NewMessageBody
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,8 @@ class OutboxWorker:
                     "outbox_delivery_failed",
                     extra={
                         "error_type": type(exc).__name__,
+                        "max_method": exc.method if isinstance(exc, MaxApiError) else None,
+                        "max_status": exc.status_code if isinstance(exc, MaxApiError) else None,
                         "outbox_id": row.id,
                         "kind": row.kind,
                         "attempts": row.attempts,

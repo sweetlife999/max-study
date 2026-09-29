@@ -21,3 +21,10 @@ htmlcov/
 
 # IDE
 .idea/
+
+# Local env copies (only the example is tracked)
+.env.*
+!.env.example
+
+# Internal research, status and pitch materials stay out of the submission
+internal/

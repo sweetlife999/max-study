@@ -3,8 +3,8 @@
 Онбординг первокурсника, активности и отметка по ротирующему QR — мини-приложение и чат-бот
 в мессенджере MAX.
 
-Работающий бот: [`se13836036_1_bot`](https://max.ru/se13836036_1_bot). Мини-приложение можно
-открыть [прямой ссылкой](https://max.ru/se13836036_1_bot?startapp) или кнопкой в диалоге с ботом.
+Работающий бот: [`t200_hakaton_max_bot`](https://max.ru/t200_hakaton_max_bot). Мини-приложение можно
+открыть [прямой ссылкой](https://max.ru/t200_hakaton_max_bot?startapp) или кнопкой в диалоге с ботом.
 Публичный стенд и API: `https://max.fblrkus.ru`.
 
 **Контракт проекта — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).** Он меняется отдельным PR;
@@ -131,7 +131,7 @@ docker build -t campus-web:local web
 платформу MAX для партнёров → Чат-боты → бот → ⋮ → Настройки и в разделе «Мини-приложение»
 сохранить адрес `https://max.fblrkus.ru` (или свой `PUBLIC_WEB_URL`) и выбрать кнопку запуска.
 После этого проверьте кнопку «Открыть приложение» в чате и ссылку
-`https://max.ru/se13836036_1_bot?startapp`. Поле `web_app` у inline-кнопки содержит имя
+`https://max.ru/t200_hakaton_max_bot?startapp`. Поле `web_app` у inline-кнопки содержит имя
 бота, а не HTTPS-адрес сайта. [Инструкция MAX](https://dev.max.ru/docs/webapps/introduction).
 
 ## Переменные окружения
